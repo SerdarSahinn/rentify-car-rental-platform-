@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Kullanıcı modeli (Clerk ile senkronize)
+model User {
+  id            String    @id @default(cuid())
+  clerkId       String    @unique // Clerk user ID
+  email         String    @unique
+  firstName     String?
+  lastName      String?
+  phone         String?
+  avatar        String?
+  role          String    @default("USER")
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // İlişkiler
+  bookings      Booking[]
+  reviews       Review[]
+  favorites     Favorite[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+// Araç modeli
+model Vehicle {
+  id              String        @id @default(cuid())
+  brand           String        // Marka
+  model           String        // Model
+  year            Int           // Yıl
+  fuelType        String        // Yakıt tipi
+  transmission    String        // Vites tipi
+  category        String        // Araç kategorisi
+  seats           Int           // Koltuk sayısı
+  dailyPrice      Float         // Günlük fiyat
+  weeklyPrice     Float?        // Haftalık fiyat
+  monthlyPrice    Float?        // Aylık fiyat
+  description     String        // Açıklama
+  features        String        // Özellikler (JSON string olarak)
+  images          String        // Resim URL'leri (JSON string olarak)
+  location        String        // Konum
+  latitude        Float?        // Enlem
+  longitude       Float?        // Boylam
+  isAvailable     Boolean       @default(true)
+  isFeatured      Boolean       @default(false)
+  averageRating   Float         @default(0)
+  totalReviews    Int           @default(0)
+  totalBookings   Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // İlişkiler
+  bookings        Booking[]
+  reviews         Review[]
+  favorites       Favorite[]
+
+  @@unique([brand, model, year])
+  @@map("vehicles")
+}
+
+// Kiralama modeli
+model Booking {
+  id              String        @id @default(cuid())
+  userId          String
+  vehicleId       String
+  startDate       DateTime
+  endDate         DateTime
+  totalDays       Int
+  totalPrice      Float
+  status          String        @default("PENDING")
+  paymentStatus   String        @default("PENDING")
+  stripePaymentId String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // İlişkiler
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle         Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@map("bookings")
+}
+
+// Yorum modeli
+model Review {
+  id          String   @id @default(cuid())
+  userId      String
+  vehicleId   String
+  rating      Int      // 1-5 yıldız
+  comment     String
+  isApproved  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vehicleId])
+  @@map("reviews")
+}
+
+// Favori modeli
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  vehicleId String
+  createdAt DateTime @default(now())
+
+  // İlişkiler
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vehicleId])
+  @@map("favorites")
+}
+
+// Bildirim modeli
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  data      String?          // Ek veri (JSON string olarak)
+  createdAt DateTime         @default(now())
+
+  // İlişkiler
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// Enum değerleri string olarak kullanılacak
+// UserRole: "ADMIN", "USER"
+// FuelType: "GASOLINE", "DIESEL", "ELECTRIC", "HYBRID", "LPG"
+// Transmission: "MANUAL", "AUTOMATIC"
+// VehicleCategory: "ECONOMY", "COMPACT", "MID_SIZE", "FULL_SIZE", "SUV", "LUXURY", "VAN", "TRUCK"
+// BookingStatus: "PENDING", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED"
+// PaymentStatus: "PENDING", "PAID", "FAILED", "REFUNDED"
+// NotificationType: "BOOKING_CONFIRMED", "BOOKING_CANCELLED", "PAYMENT_SUCCESS", "PAYMENT_FAILED", "REVIEW_APPROVED", "SYSTEM_MESSAGE" 
