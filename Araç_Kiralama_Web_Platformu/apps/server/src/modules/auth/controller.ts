@@ -23,7 +23,6 @@ export const getProfile = asyncHandler(async (req: AuthRequest, res: Response) =
       updatedAt: true,
       _count: {
         select: {
-          bookings: true,
           reviews: true,
           favorites: true,
         },
@@ -120,8 +119,7 @@ export const clerkWebhook = asyncHandler(async (req: Request, res: Response) => 
 export const getUserStats = asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.user?.id;
 
-  const [totalBookings, totalReviews, totalFavorites] = await Promise.all([
-    prisma.booking.count({ where: { userId } }),
+  const [totalReviews, totalFavorites] = await Promise.all([
     prisma.review.count({ where: { userId } }),
     prisma.favorite.count({ where: { userId } }),
   ]);
@@ -129,7 +127,6 @@ export const getUserStats = asyncHandler(async (req: AuthRequest, res: Response)
   res.status(200).json({
     success: true,
     data: {
-      totalBookings,
       totalReviews,
       totalFavorites,
     },

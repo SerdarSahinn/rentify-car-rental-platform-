@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // Kullanıcı modeli (Clerk ile senkronize)
@@ -29,6 +29,7 @@ model User {
   reviews       Review[]
   favorites     Favorite[]
   notifications Notification[]
+  payments      Payment[]
 
   @@map("users")
 }
@@ -79,6 +80,8 @@ model Booking {
   totalPrice      Decimal       @db.Decimal(10, 2)
   status          BookingStatus @default(PENDING)
   paymentStatus   PaymentStatus @default(PENDING)
+  pickupLocation  String?       // Teslim alma konumu
+  dropoffLocation String?       // Teslim etme konumu
   stripePaymentId String?
   notes           String?
   createdAt       DateTime      @default(now())
@@ -87,8 +90,32 @@ model Booking {
   // İlişkiler
   user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   vehicle         Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  payments        Payment[]
 
   @@map("bookings")
+}
+
+// Ödeme modeli
+model Payment {
+  id              String        @id @default(cuid())
+  bookingId       String
+  userId          String
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("TRY")
+  paymentMethod   PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  stripePaymentId String?
+  stripeSessionId String?
+  description     String?
+  metadata        Json?         // Stripe metadata
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // İlişkiler
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
 }
 
 // Yorum modeli
@@ -184,6 +211,14 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  CASH
+  STRIPE
 }
 
 enum NotificationType {

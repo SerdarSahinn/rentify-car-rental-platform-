@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Vehicle, User, Review, Booking, ApiResponse, VehicleFilters } from '../types/index.js';
+import type { Vehicle, User, Review, ApiResponse, VehicleFilters } from '../types/index.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
@@ -15,8 +15,12 @@ api.interceptors.request.use(async (config) => {
   try {
     // Get token from Clerk
     const token = await window.Clerk?.session?.getToken();
+    console.log('🔍 Token alındı:', token ? 'Var' : 'Yok');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('🔍 Authorization header eklendi');
+    } else {
+      console.log('🔍 Token yok, header eklenmedi');
     }
   } catch (error) {
     console.error('Token alınamadı:', error);

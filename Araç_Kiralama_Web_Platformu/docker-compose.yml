@@ -12,7 +12,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
+    networks:
+      - rentify_network
 
   redis:
     image: redis:7-alpine
@@ -21,10 +22,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    restart: unless-stopped
+    networks:
+      - rentify_network
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    image: elasticsearch:8.11.0
     container_name: rentify_elasticsearch
     environment:
       - discovery.type=single-node
@@ -34,9 +36,14 @@ services:
       - "9200:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
-    restart: unless-stopped
+    networks:
+      - rentify_network
 
 volumes:
   postgres_data:
   redis_data:
-  elasticsearch_data: 
+  elasticsearch_data:
+
+networks:
+  rentify_network:
+    driver: bridge 

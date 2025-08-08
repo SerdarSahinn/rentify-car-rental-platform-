@@ -29,6 +29,7 @@ model User {
   reviews       Review[]
   favorites     Favorite[]
   notifications Notification[]
+  userForms     UserForm[]
 
   @@map("users")
 }
@@ -72,7 +73,7 @@ model Vehicle {
 // Kiralama modeli
 model Booking {
   id              String        @id @default(cuid())
-  userId          String
+  userId          String        // Kullanıcı ID'si
   vehicleId       String
   startDate       DateTime
   endDate         DateTime
@@ -88,6 +89,7 @@ model Booking {
   // İlişkiler
   user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   vehicle         Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  userForms       UserForm[]
 
   @@map("bookings")
 }
@@ -141,6 +143,31 @@ model Notification {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+// Kullanıcı form modeli
+model UserForm {
+  id              String        @id @default(cuid())
+  userId          String
+  bookingId       String
+  tcNumber        String        // TC Kimlik No
+  driverLicense   String        // Sürücü Belgesi No
+  licenseExpiry   DateTime      // Sürücü Belgesi Geçerlilik
+  phoneNumber     String        // Telefon
+  address         String        // Adres
+  emergencyContact String       // Acil Durum İletişim
+  isApproved      Boolean       @default(false)
+  isRejected      Boolean       @default(false)
+  rejectionReason String?       // Red sebebi
+  submittedAt     DateTime      @default(now())
+  approvedAt      DateTime?
+  approvedBy      String?       // Admin ID
+
+  // İlişkiler
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("user_forms")
 }
 
 // Enum değerleri string olarak kullanılacak

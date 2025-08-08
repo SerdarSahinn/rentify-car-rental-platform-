@@ -13,13 +13,23 @@ import { generalLimiter } from './config/rateLimit';
 import { errorHandler, notFound } from './middlewares/errorHandler';
 
 // Route imports
-import authRoutes from './modules/auth/routes';
+import bookingRoutes from './modules/bookings/routes';
 import vehicleRoutes from './modules/vehicles/routes';
+import authRoutes from './modules/auth/routes';
+import userFormRoutes from './modules/userForms/routes';
+import notificationRoutes from './modules/notifications/routes';
 
 // Load environment variables
-dotenv.config();
+import path from 'path';
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const app = express();
+// Debug environment variables
+console.log('🔍 Environment variables loaded:');
+console.log('🔍 CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? 'Var' : 'Yok');
+console.log('🔍 NODE_ENV:', process.env.NODE_ENV);
+console.log('🔍 PORT:', process.env.PORT);
+
+const app: express.Application = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
@@ -56,6 +66,9 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/forms', userFormRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -87,16 +100,7 @@ process.on('SIGTERM', () => {
   console.log('SIGTERM alındı, server kapatılıyor...');
   server.close(() => {
     console.log('Server kapatıldı');
-    process.exit(0);
   });
 });
 
-process.on('SIGINT', () => {
-  console.log('SIGINT alındı, server kapatılıyor...');
-  server.close(() => {
-    console.log('Server kapatıldı');
-    process.exit(0);
-  });
-});
-
-export { app, io }; 
+export { app, io, server }; 

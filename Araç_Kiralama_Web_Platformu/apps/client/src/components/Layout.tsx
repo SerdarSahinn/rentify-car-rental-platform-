@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { UserButton, SignInButton, SignUpButton, useUser } from '@clerk/clerk-react';
 import { Car, Home, User, Menu, X, Sparkles, Shield, Clock, Star } from 'lucide-react';

@@ -1,14 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { Car, Star, MapPin, Users, Calendar } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Car, Star, MapPin, Users, Calendar, Shield } from 'lucide-react';
 import { vehicleApi } from '../services/api';
 import type { Vehicle } from '../types/index.js';
 import { formatPrice, getVehicleImages, getCategoryDisplay } from '../utils/format';
+import { useAuth } from '../hooks/useAuth';
 
 const HomePage = () => {
+  const { requireAuth } = useAuth();
+  const navigate = useNavigate();
+  
   const { data: featuredVehicles, isLoading } = useQuery({
     queryKey: ['featured-vehicles'],
-    queryFn: () => vehicleApi.getFeaturedVehicles(),
+    queryFn: () => vehicleApi.getVehicles({ isFeatured: true }),
   });
 
   const { data: categories } = useQuery({
@@ -72,12 +76,14 @@ const HomePage = () => {
               </span>
               <span className="text-sm text-gray-500">/gün</span>
             </div>
-            <Link
-              to={`/vehicles/${vehicle.id}`}
+            <button
+              onClick={() => requireAuth(() => {
+                navigate(`/vehicles/${vehicle.id}`);
+              })}
               className="btn btn-primary btn-sm"
             >
               Detaylar
-            </Link>
+            </button>
           </div>
         </div>
       </div>
@@ -109,6 +115,13 @@ const HomePage = () => {
             <button className="btn btn-lg border-2 border-white text-white hover:bg-white hover:text-primary-600">
               Nasıl Çalışır?
             </button>
+            <Link
+              to="/admin/login"
+              className="btn btn-lg border-2 border-white text-white hover:bg-white hover:text-primary-600"
+            >
+              <Shield className="h-5 w-5 mr-2" />
+              Admin Girişi
+            </Link>
           </div>
         </div>
       </section>
