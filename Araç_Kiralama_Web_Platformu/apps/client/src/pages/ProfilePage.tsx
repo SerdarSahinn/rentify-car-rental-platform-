@@ -1,7 +1,7 @@
 import { useUser } from '@clerk/clerk-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
-import { User, Car, Calendar, Star, MessageSquare, FileText, CheckCircle } from 'lucide-react';
+import { User, Car, Calendar, Star, MessageSquare, FileText, CheckCircle, X } from 'lucide-react';
 import { getUserBookings } from '../services/bookingApi';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,6 +9,7 @@ const ProfilePage = () => {
   const { user, isSignedIn } = useUser();
   const [activeTab, setActiveTab] = useState<'overview' | 'bookings' | 'messages' | 'forms'>('overview');
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // Admin kontrolü - admin ise dashboard'a yönlendir
   useEffect(() => {
@@ -54,6 +55,39 @@ const ProfilePage = () => {
   });
 
   const notifications = notificationsResponse?.data || [];
+
+  // Mesaj silme fonksiyonu
+  const deleteNotification = async (notificationId: string) => {
+    try {
+      const token = await window.Clerk?.session?.getToken();
+      if (!token) {
+        alert('Token bulunamadı!');
+        return;
+      }
+
+      const response = await fetch(`http://localhost:3001/api/notifications/${notificationId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userEmail: user?.emailAddresses[0]?.emailAddress
+        })
+      });
+
+      if (response.ok) {
+        // Mesajları yenile
+        queryClient.invalidateQueries({ queryKey: ['userNotifications'] });
+        console.log('✅ Mesaj silindi');
+      } else {
+        alert('Mesaj silinirken hata oluştu!');
+      }
+    } catch (error) {
+      console.error('Mesaj silme hatası:', error);
+      alert('Mesaj silinirken hata oluştu!');
+    }
+  };
 
   // Debug logs
   console.log('🔍 Profile Page Debug:');
@@ -315,9 +349,9 @@ const ProfilePage = () => {
               ) : (
                 <div className="space-y-4">
                   {notifications.map((notification: any) => (
-                    <div key={notification.id} className={`p-4 rounded-lg border ${notification.isRead ? 'bg-gray-50' : 'bg-blue-50 border-blue-200'}`}>
+                    <div key={notification.id} className={`p-4 rounded-lg border ${notification.isRead ? 'bg-gray-50' : 'bg-blue-50 border-blue-200'} relative`}>
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                        <div className="flex-1 pr-8">
                           <h4 className="font-medium text-gray-900">{notification.title}</h4>
                           <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
                           <p className="text-xs text-gray-400 mt-2">
@@ -332,8 +366,29 @@ const ProfilePage = () => {
                               onClick={() => navigate(`/forms/${JSON.parse(notification.data).bookingId}`)}
                               className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                             >
-                              Formu Görüntüle
+                              Formu Doldur
                             </button>
+                          )}
+                          
+                          {/* Form gönderildi ama tekrar görüntüleme butonu */}
+                          {(notification.type === 'FORM_SUBMITTED' || 
+                            (notification.type === 'BOOKING_STATUS' && 
+                             notification.data && 
+                             ['FORM_PENDING', 'FORM_APPROVED'].includes(JSON.parse(notification.data).status))) && (
+                            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center">
+                                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                                  <span className="text-sm text-green-800 font-medium">Form Gönderildi</span>
+                                </div>
+                                <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
+                                  ✓ Tamamlandı
+                                </span>
+                              </div>
+                              <p className="text-xs text-green-600 mt-1">
+                                Formunuz başarıyla gönderildi ve admin tarafından inceleniyor.
+                              </p>
+                            </div>
                           )}
                           
                           {/* Form gönderildi notification'ı */}
@@ -347,6 +402,17 @@ const ProfilePage = () => {
                             </div>
                           )}
                         </div>
+                        
+                        {/* Silme butonu */}
+                        <button
+                          onClick={() => deleteNotification(notification.id)}
+                          className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                          title="Mesajı sil"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                        
+                        {/* Okunmamış işareti */}
                         {!notification.isRead && (
                           <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
                         )}

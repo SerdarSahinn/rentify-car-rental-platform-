@@ -15,4 +15,7 @@ router.patch('/:notificationId/read', authenticateUser, notificationController.m
 // Tüm bildirimleri okundu olarak işaretle
 router.patch('/read-all', authenticateUser, notificationController.markAllAsRead.bind(notificationController));
 
+// Bildirimi sil
+router.delete('/:notificationId', authenticateUser, notificationController.deleteNotification.bind(notificationController));
+
 export default router;

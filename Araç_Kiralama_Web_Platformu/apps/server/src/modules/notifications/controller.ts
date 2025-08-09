@@ -120,4 +120,63 @@ export class NotificationController {
       return res.status(500).json({ error: 'Bildirimler güncellenemedi' });
     }
   }
+
+  // Bildirimi sil
+  async deleteNotification(req: AuthRequest, res: Response) {
+    try {
+      console.log('🗑️ deleteNotification çağrıldı');
+      
+      let userId = req.user?.id;
+      const { notificationId } = req.params;
+      
+      console.log('🔍 userId:', userId);
+      console.log('🔍 notificationId:', notificationId);
+
+      // Email ile kullanıcı bulma (getUserNotifications ile aynı mantık)
+      if (req.body?.userEmail) {
+        console.log('🔍 Email ile kullanıcı aranıyor:', req.body.userEmail);
+        
+        const userByEmail = await prisma.user.findUnique({
+          where: { email: req.body.userEmail }
+        });
+        
+        if (userByEmail) {
+          userId = userByEmail.id;
+          console.log('✅ Email ile kullanıcı bulundu:', userByEmail.email);
+        }
+      }
+
+      if (!userId) {
+        console.log('❌ Kullanıcı kimliği bulunamadı');
+        return res.status(401).json({ error: 'Kullanıcı kimliği gerekli' });
+      }
+
+      // Sadece kendi bildirimini silebilir
+      const notification = await prisma.notification.findFirst({
+        where: { 
+          id: notificationId,
+          userId: userId 
+        }
+      });
+
+      if (!notification) {
+        console.log('❌ Bildirim bulunamadı veya yetki yok');
+        return res.status(404).json({ error: 'Bildirim bulunamadı' });
+      }
+
+      await prisma.notification.delete({
+        where: { id: notificationId }
+      });
+
+      console.log('✅ Bildirim silindi:', notification.title);
+
+      return res.json({
+        success: true,
+        message: 'Bildirim başarıyla silindi'
+      });
+    } catch (error) {
+      console.error('❌ Bildirim silme hatası:', error);
+      return res.status(500).json({ error: 'Bildirim silinemedi' });
+    }
+  }
 }
