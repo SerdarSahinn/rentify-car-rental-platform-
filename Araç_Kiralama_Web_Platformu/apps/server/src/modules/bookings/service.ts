@@ -35,9 +35,14 @@ export class BookingService {
     });
   }
 
-  // Tüm rezervasyonları getir (kullanıcı olmadan)
-  async getAllBookingsForUser() {
-    return await prisma.booking.findMany({
+  // Belirli kullanıcının rezervasyonlarını getir
+  async getUserBookings(userId: string) {
+    console.log('🔍 Service: getUserBookings called for userId:', userId);
+    
+    const bookings = await prisma.booking.findMany({
+      where: {
+        userId: userId, // SADECE bu kullanıcının rezervasyonları
+      },
       include: {
         vehicle: true,
       },
@@ -45,6 +50,15 @@ export class BookingService {
         createdAt: 'desc',
       },
     });
+    
+    console.log('🔍 Service: Found bookings for user:', bookings.length);
+    return bookings;
+  }
+
+  // Tüm rezervasyonları getir (kullanıcı olmadan) - eski fonksiyon kaldırıldı
+  async getAllBookingsForUser() {
+    // Bu fonksiyon artık kullanılmamalı - güvenlik riski
+    throw new Error('Bu fonksiyon güvenlik nedeniyle kaldırıldı. getUserBookings kullanın.');
   }
 
   // Kullanıcı email'ini güncelle
@@ -52,17 +66,39 @@ export class BookingService {
     console.log('🔍 Service: updateUserEmail called with:', { userId, newEmail });
     
     try {
+      // Mevcut kullanıcıyı kontrol et
+      const currentUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true }
+      });
+      
+      if (!currentUser) {
+        throw new Error('Kullanıcı bulunamadı');
+      }
+      
+      // Eğer email zaten aynıysa güncelleme yapma
+      if (currentUser.email === newEmail) {
+        console.log('🔍 Service: Email already same, skipping update');
+        return currentUser;
+      }
+      
       // Önce bu email'e sahip başka kullanıcı var mı kontrol et
       const existingUser = await prisma.user.findUnique({
         where: { email: newEmail },
-        select: { id: true, email: true }
+        select: { id: true, email: true, clerkId: true }
       });
       
       if (existingUser && existingUser.id !== userId) {
         console.log('🔍 Service: Email already exists for another user:', existingUser.email);
         
-        // Eğer başka kullanıcıda varsa, o kullanıcıyı sil ve booking'lerini bu kullanıcıya taşı
-        console.log('🔍 Service: Transferring bookings from existing user to current user');
+        // Eğer başka kullanıcı gerçek Clerk kullanıcısıysa, bu güncellemeleri yapma
+        if (!existingUser.clerkId?.startsWith('temp_') && !existingUser.clerkId?.includes('manual')) {
+          console.log('🔍 Service: Existing user is real Clerk user, skipping email update');
+          throw new Error('Bu email zaten başka bir kullanıcıya ait');
+        }
+        
+        // Sadece sahte/test kullanıcılarını sil
+        console.log('🔍 Service: Transferring bookings from fake user to current user');
         
         // Booking'leri taşı
         await prisma.booking.updateMany({
@@ -70,12 +106,12 @@ export class BookingService {
           data: { userId: userId }
         });
         
-        // Eski kullanıcıyı sil
+        // Eski sahte kullanıcıyı sil
         await prisma.user.delete({
           where: { id: existingUser.id }
         });
         
-        console.log('🔍 Service: Old user deleted, bookings transferred');
+        console.log('🔍 Service: Fake user deleted, bookings transferred');
       }
       
       // Şimdi email'i güncelle
@@ -94,7 +130,7 @@ export class BookingService {
       return updatedUser;
     } catch (error) {
       console.error('🔍 Service: Error updating user email:', error);
-      throw error;
+      throw new Error(`Email güncelleme hatası: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}`);
     }
   }
 

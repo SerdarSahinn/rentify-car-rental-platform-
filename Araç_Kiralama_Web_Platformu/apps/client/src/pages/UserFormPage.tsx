@@ -1,16 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { 
   FileText, 
   Upload, 
   User, 
   CreditCard, 
   Phone, 
-  CheckCircle
+  CheckCircle,
+  AlertCircle,
+  Eye,
+  Car
 } from 'lucide-react';
 import { createForm } from '../services/formApi';
+import api from '../services/api';
+import { getVehicleImages } from '../utils/format';
 
 const UserFormPage = () => {
   const { isSignedIn } = useUser();
@@ -33,6 +38,23 @@ const UserFormPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Mevcut form kontrolü
+  const { data: existingForm, isLoading: formLoading } = useQuery({
+    queryKey: ['existingForm', bookingId],
+    queryFn: async () => {
+      try {
+        const response = await api.get(`/forms/booking/${bookingId}`);
+        return response.data;
+      } catch (error: any) {
+        if (error.response?.status === 404) {
+          return null; // Form yok, devam et
+        }
+        throw error;
+      }
+    },
+    enabled: !!bookingId
+  });
+
   // Form gönderme mutation'ı
   const formMutation = useMutation({
     mutationFn: createForm,
@@ -41,6 +63,8 @@ const UserFormPage = () => {
       queryClient.invalidateQueries({ queryKey: ['userNotifications'] });
       // Booking'leri yenile
       queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+      // Form cache'ini yenile
+      queryClient.invalidateQueries({ queryKey: ['existingForm', bookingId] });
       navigate('/profile?tab=messages'); // Mesajlar tabına git
     },
     onError: (error) => {
@@ -48,8 +72,13 @@ const UserFormPage = () => {
     }
   });
 
+  useEffect(() => {
+    if (!isSignedIn) {
+      navigate('/');
+    }
+  }, [isSignedIn, navigate]);
+
   if (!isSignedIn) {
-    navigate('/');
     return null;
   }
 
@@ -130,6 +159,225 @@ const UserFormPage = () => {
       setIsSubmitting(false);
     }
   };
+
+  // Loading durumu
+  if (formLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="text-gray-600 mt-4">Form durumu kontrol ediliyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Form zaten gönderilmişse
+  if (existingForm?.data) {
+    const form = existingForm.data;
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Header */}
+          <div className="mb-8">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900">Form Gönderildi</h1>
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                <div>
+                  <p className="text-green-800 font-medium">Form başarıyla gönderildi!</p>
+                  <p className="text-green-600 text-sm mt-1">
+                    Formunuz {new Date(form.submittedAt).toLocaleDateString('tr-TR')} tarihinde gönderildi.
+                    Admin tarafından incelendikten sonra size bilgi verilecek.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Kiralanan Araç Bilgileri */}
+          <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+            <h2 className="text-xl font-semibold text-gray-900 flex items-center mb-6">
+              <Car className="h-5 w-5 mr-2" />
+              Kiralanan Araç
+            </h2>
+            
+            <div className="flex items-center space-x-6 p-6 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200 hover:shadow-md transition-shadow duration-200">
+              <div className="w-24 h-20 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0 shadow-md">
+                {(() => {
+                  const images = getVehicleImages(form.booking.vehicle.images);
+                  const mainImage = images[0];
+                  
+                  if (mainImage) {
+                    return (
+                      <img
+                        src={mainImage}
+                        alt={`${form.booking.vehicle.brand} ${form.booking.vehicle.model}`}
+                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    );
+                  }
+                  
+                  return (
+                    <div className="w-full h-full bg-blue-100 flex items-center justify-center">
+                      <Car className="h-8 w-8 text-blue-600" />
+                    </div>
+                  );
+                })()}
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {form.booking.vehicle.brand} {form.booking.vehicle.model}
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm text-gray-600">
+                  <div>
+                    <span className="font-medium">Yıl:</span> {form.booking.vehicle.year}
+                  </div>
+                  <div>
+                    <span className="font-medium">Yakıt:</span> {
+                      form.booking.vehicle.fuelType === 'GASOLINE' ? 'Benzin' :
+                      form.booking.vehicle.fuelType === 'DIESEL' ? 'Dizel' :
+                      form.booking.vehicle.fuelType === 'ELECTRIC' ? 'Elektrik' :
+                      form.booking.vehicle.fuelType === 'HYBRID' ? 'Hibrit' :
+                      form.booking.vehicle.fuelType
+                    }
+                  </div>
+                  <div>
+                    <span className="font-medium">Vites:</span> {
+                      form.booking.vehicle.transmission === 'AUTOMATIC' ? 'Otomatik' :
+                      form.booking.vehicle.transmission === 'MANUAL' ? 'Manuel' :
+                      form.booking.vehicle.transmission
+                    }
+                  </div>
+                  <div>
+                    <span className="font-medium">Koltuk:</span> {form.booking.vehicle.seats} kişi
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    <span className="font-medium">Kiralama Tarihi:</span>{' '}
+                    {new Date(form.booking.startDate).toLocaleDateString('tr-TR')} - {new Date(form.booking.endDate).toLocaleDateString('tr-TR')}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500 mb-1">Toplam Tutar</div>
+                    <div className="text-xl font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">
+                      ₺{form.booking.totalPrice}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Form Bilgileri (Readonly) */}
+          <div className="bg-white rounded-2xl shadow-lg p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                <Eye className="h-5 w-5 mr-2" />
+                Gönderilen Form Bilgileri
+              </h2>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                form.isApproved ? 'bg-green-100 text-green-800' :
+                form.isRejected ? 'bg-red-100 text-red-800' :
+                'bg-yellow-100 text-yellow-800'
+              }`}>
+                {form.isApproved ? 'Onaylandı' : 
+                 form.isRejected ? 'Reddedildi' : 
+                 'İnceleme Bekliyor'}
+              </span>
+            </div>
+
+            <div className="space-y-6">
+              {/* Kişisel Bilgiler */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                  <User className="h-5 w-5 mr-2" />
+                  Kişisel Bilgiler
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-600 mb-1">TC Kimlik No</label>
+                    <p className="text-gray-900 font-medium">{form.tcNumber}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Telefon Numarası</label>
+                    <p className="text-gray-900 font-medium">{form.phoneNumber}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sürücü Belgesi Bilgileri */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                  <CreditCard className="h-5 w-5 mr-2" />
+                  Sürücü Belgesi Bilgileri
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Sürücü Belgesi No</label>
+                    <p className="text-gray-900 font-medium">{form.driverLicense}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Geçerlilik Tarihi</label>
+                    <p className="text-gray-900 font-medium">
+                      {new Date(form.licenseExpiry).toLocaleDateString('tr-TR')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* İletişim Bilgileri */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                  <Phone className="h-5 w-5 mr-2" />
+                  İletişim Bilgileri
+                </h3>
+                <div className="space-y-4">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Adres</label>
+                    <p className="text-gray-900 font-medium">{form.address}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Acil Durum İletişim</label>
+                    <p className="text-gray-900 font-medium">{form.emergencyContact}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {form.isRejected && form.rejectionReason && (
+              <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+                  <span className="font-medium text-red-800">Red Nedeni</span>
+                </div>
+                <p className="text-red-700 text-sm">{form.rejectionReason}</p>
+              </div>
+            )}
+
+            <div className="flex justify-center mt-8">
+              <button
+                onClick={() => navigate('/profile')}
+                className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Profile Dön
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

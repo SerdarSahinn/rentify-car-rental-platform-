@@ -40,16 +40,28 @@ export class BookingController {
     }
   }
 
-  // Tüm rezervasyonları getir (kullanıcı olmadan)
+  // Kullanıcının kendi rezervasyonlarını getir
   async getAllBookingsForUser(req: AuthRequest, res: Response) {
     try {
-      const bookings = await this.bookingService.getAllBookingsForUser();
+      console.log('🔍 getAllBookingsForUser çağrıldı');
+      console.log('🔍 Kullanıcı ID:', req.user?.id);
+      console.log('🔍 Kullanıcı Email:', req.user?.email);
+      
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Kullanıcı kimliği bulunamadı' });
+      }
+      
+      const bookings = await this.bookingService.getUserBookings(req.user.id);
+      
+      console.log('🔍 Kullanıcının rezervasyon sayısı:', bookings.length);
+      
       return res.json({
         success: true,
         data: bookings,
         message: 'Kullanıcı kiralamaları başarıyla getirildi'
       });
     } catch (error) {
+      console.error('🔍 getAllBookingsForUser hatası:', error);
       return res.status(500).json({ error: 'Rezervasyonlar getirilemedi' });
     }
   }
@@ -72,9 +84,14 @@ export class BookingController {
       }
       
       // Eğer kullanıcının email'i geçici ise ve request'te gerçek email varsa güncelle
-      if (userEmail && req.user?.email?.startsWith('temp_')) {
+      if (userEmail && req.user?.email?.startsWith('temp_') && userEmail !== req.user.email) {
         console.log('🔍 Updating user email from temp to:', userEmail);
-        await this.bookingService.updateUserEmail(userId, userEmail);
+        try {
+          await this.bookingService.updateUserEmail(userId, userEmail);
+        } catch (emailUpdateError) {
+          console.error('🔍 Email update failed, continuing with existing email:', emailUpdateError);
+          // Email güncellenemese bile rezervasyon devam etsin
+        }
       }
       
       console.log('🔍 Creating booking with data:', {
@@ -91,7 +108,23 @@ export class BookingController {
       return res.status(201).json(newBooking);
     } catch (error) {
       console.error('🔍 Booking creation error:', error);
-      return res.status(400).json({ error: 'Rezervasyon oluşturulamadı' });
+      
+      // Daha detaylı hata mesajı
+      let errorMessage = 'Rezervasyon oluşturulamadı';
+      if (error instanceof Error) {
+        console.error('🔍 Error message:', error.message);
+        console.error('🔍 Error stack:', error.stack);
+        
+        if (error.message.includes('Unique constraint failed')) {
+          errorMessage = 'Bu email zaten kullanımda';
+        } else if (error.message.includes('User creation failed')) {
+          errorMessage = 'Kullanıcı oluşturulamadı';
+        } else {
+          errorMessage = error.message || 'Rezervasyon oluşturulamadı';
+        }
+      }
+      
+      return res.status(500).json({ error: errorMessage });
     }
   }
 
