@@ -10,6 +10,29 @@ export interface AuthRequest extends Request {
   };
 }
 
+// Admin yetkisi kontrolü
+export const requireAdmin = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: 'Kimlik doğrulama gerekli',
+    });
+  }
+
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({
+      success: false,
+      error: 'Bu işlem için admin yetkisi gerekli',
+    });
+  }
+
+  return next();
+};
+
 export const authenticateUser = async (
   req: AuthRequest,
   res: Response,
@@ -140,26 +163,7 @@ export const authenticateUser = async (
   }
 };
 
-export const requireAdmin = (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Kimlik doğrulama gerekli',
-    });
-  }
 
-  // Admin kontrolü - email ile
-  if (req.user.email !== 'admin@rentify.com') {
-    return res.status(403).json({
-      error: 'Admin yetkisi gerekli',
-    });
-  }
-
-  return next();
-};
 
 export const optionalAuth = async (
   req: AuthRequest,

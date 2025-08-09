@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ClerkProvider } from '@clerk/clerk-react';
 import Layout from './components/Layout';
+import AdminLayout from './components/AdminLayout';
 import HomePage from './pages/HomePage';
 import VehiclesPage from './pages/VehiclesPage';
 import VehicleDetailPage from './pages/VehicleDetailPage';
@@ -11,6 +12,9 @@ import PaymentPage from './pages/PaymentPage';
 import SuccessPage from './pages/SuccessPage';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminBookings from './pages/AdminBookings';
+import AdminUsers from './pages/AdminUsers';
+import AdminSettings from './pages/AdminSettings';
 import UserFormPage from './pages/UserFormPage';
 import './App.css';
 
@@ -36,7 +40,22 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <Router>
           <Routes>
+            {/* Admin Login - Layout olmadan */}
             <Route path="/admin/login" element={<AdminLogin />} />
+            
+            {/* Admin Routes - AdminLayout ile */}
+            <Route path="/admin/*" element={
+              <AdminLayout>
+                <Routes>
+                  <Route path="/" element={<AdminDashboard />} />
+                  <Route path="/bookings" element={<AdminBookings />} />
+                  <Route path="/users" element={<AdminUsers />} />
+                  <Route path="/settings" element={<AdminSettings />} />
+                </Routes>
+              </AdminLayout>
+            } />
+            
+            {/* Normal User Routes - Layout ile */}
             <Route path="/*" element={
               <Layout>
                 <Routes>
@@ -48,7 +67,6 @@ function App() {
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/forms/:bookingId" element={<UserFormPage />} />
                   <Route path="/success" element={<SuccessPage />} />
-                  <Route path="/admin" element={<AdminDashboard />} />
                 </Routes>
               </Layout>
             } />

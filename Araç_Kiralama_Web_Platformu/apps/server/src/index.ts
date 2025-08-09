@@ -18,6 +18,7 @@ import vehicleRoutes from './modules/vehicles/routes';
 import authRoutes from './modules/auth/routes';
 import userFormRoutes from './modules/userForms/routes';
 import notificationRoutes from './modules/notifications/routes';
+import adminRoutes from './modules/admin/routes';
 
 // Load environment variables
 import path from 'path';
@@ -69,6 +70,7 @@ app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/forms', userFormRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {

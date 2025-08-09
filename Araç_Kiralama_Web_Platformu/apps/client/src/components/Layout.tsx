@@ -1,17 +1,25 @@
 import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { UserButton, SignInButton, SignUpButton, useUser } from '@clerk/clerk-react';
 import { Car, Home, User, Menu, X, Sparkles, Shield, Clock, Star } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface LayoutProps {
   children: ReactNode;
 }
 
 const Layout = ({ children }: LayoutProps) => {
-  const { isSignedIn } = useUser();
+  const { isSignedIn, user } = useUser();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Admin ise admin paneline yönlendir
+  useEffect(() => {
+    if (isSignedIn && user?.emailAddresses[0]?.emailAddress === 'admin@rentify.com') {
+      navigate('/admin');
+    }
+  }, [isSignedIn, user, navigate]);
 
   const navigation = [
     { name: 'Ana Sayfa', href: '/', icon: Home },
