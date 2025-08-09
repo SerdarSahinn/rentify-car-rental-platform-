@@ -139,22 +139,36 @@ export class UserFormController {
         data: { status: 'FORM_PENDING' }
       });
 
-      // Form gönderildi notification'ı oluştur
+      // Form gönderildi notification'ı oluştur (aynı booking için zaten varsa oluşturma)
       try {
-        await prisma.notification.create({
-          data: {
+        const existingNotification = await prisma.notification.findFirst({
+          where: {
             userId: userId,
             type: 'FORM_SUBMITTED',
-            title: 'Form Başarıyla Gönderildi',
-            message: `Form bilgileriniz başarıyla gönderildi. Admin tarafından incelendikten sonra size bilgi verilecek.`,
-            isRead: false,
-            data: JSON.stringify({
-              formId: form.id,
-              bookingId: bookingId
-            })
+            data: {
+              contains: `"bookingId":"${bookingId}"`
+            }
           }
         });
-        console.log('✅ Form gönderildi notification oluşturuldu');
+
+        if (!existingNotification) {
+          await prisma.notification.create({
+            data: {
+              userId: userId,
+              type: 'FORM_SUBMITTED',
+              title: 'Form Başarıyla Gönderildi',
+              message: `Form bilgileriniz başarıyla gönderildi. Admin tarafından incelendikten sonra size bilgi verilecek.`,
+              isRead: false,
+              data: JSON.stringify({
+                formId: form.id,
+                bookingId: bookingId
+              })
+            }
+          });
+          console.log('✅ Form gönderildi notification oluşturuldu');
+        } else {
+          console.log('ℹ️ Bu booking için form notification zaten mevcut, yeni oluşturulmadı');
+        }
       } catch (notificationError) {
         console.error('❌ Notification oluşturma hatası:', notificationError);
       }
@@ -212,6 +226,44 @@ export class UserFormController {
         });
       }
 
+      // Form onaylandı/reddedildi notification'ı oluştur
+      try {
+        if (isApproved) {
+          await prisma.notification.create({
+            data: {
+              userId: form.booking.userId,
+              type: 'FORM_APPROVED',
+              title: 'Form Onaylandı',
+              message: `Formunuz admin tarafından onaylandı! Kiralama işleminiz onaylanmıştır. İyi yolculuklar!`,
+              isRead: false,
+              data: JSON.stringify({
+                formId: form.id,
+                bookingId: form.bookingId
+              })
+            }
+          });
+          console.log('✅ Form onaylandı notification oluşturuldu');
+        } else if (isRejected) {
+          await prisma.notification.create({
+            data: {
+              userId: form.booking.userId,
+              type: 'FORM_REJECTED',
+              title: 'Form Reddedildi',
+              message: `Formunuz admin tarafından reddedildi. ${rejectionReason ? `Sebep: ${rejectionReason}` : 'Lütfen bilgilerinizi kontrol edip tekrar deneyin.'}`,
+              isRead: false,
+              data: JSON.stringify({
+                formId: form.id,
+                bookingId: form.bookingId,
+                rejectionReason: rejectionReason
+              })
+            }
+          });
+          console.log('✅ Form reddedildi notification oluşturuldu');
+        }
+      } catch (notificationError) {
+        console.error('❌ Form durum notification oluşturma hatası:', notificationError);
+      }
+
       return res.json({
         success: true,
         data: updatedForm,
@@ -220,6 +272,49 @@ export class UserFormController {
     } catch (error) {
       console.error('Form durum güncelleme hatası:', error);
       return res.status(500).json({ error: 'Form durumu güncellenemedi' });
+    }
+  }
+
+  // Booking ID'ye göre form getir
+  async getFormByBookingId(req: AuthRequest, res: Response) {
+    try {
+      const { bookingId } = req.params;
+      const userId = req.user?.id;
+
+      console.log('🔍 getFormByBookingId çağrıldı:', { bookingId, userId });
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Kullanıcı kimliği gerekli' });
+      }
+
+      const form = await prisma.userForm.findFirst({
+        where: { 
+          bookingId,
+          userId // Kullanıcı sadece kendi formunu görebilir
+        },
+        include: {
+          booking: {
+            include: {
+              vehicle: true
+            }
+          }
+        }
+      });
+
+      if (!form) {
+        console.log('🔍 Form bulunamadı:', { bookingId, userId });
+        return res.status(404).json({ error: 'Form bulunamadı' });
+      }
+
+      console.log('✅ Form bulundu:', form.id);
+
+      return res.json({
+        success: true,
+        data: form
+      });
+    } catch (error) {
+      console.error('Booking form getirme hatası:', error);
+      return res.status(500).json({ error: 'Form getirilemedi' });
     }
   }
 

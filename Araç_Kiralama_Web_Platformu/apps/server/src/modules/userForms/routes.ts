@@ -11,6 +11,9 @@ router.get('/user', authenticateUser, userFormController.getUserForms.bind(userF
 // Tüm formları getir (admin için)
 router.get('/', authenticateUser, requireAdmin, userFormController.getAllForms.bind(userFormController));
 
+// Booking ID'ye göre form getir
+router.get('/booking/:bookingId', authenticateUser, userFormController.getFormByBookingId.bind(userFormController));
+
 // Form detayını getir
 router.get('/:formId', authenticateUser, userFormController.getFormById.bind(userFormController));
 
