@@ -19,16 +19,48 @@ import authRoutes from './modules/auth/routes';
 import userFormRoutes from './modules/userForms/routes';
 import notificationRoutes from './modules/notifications/routes';
 import adminRoutes from './modules/admin/routes';
+import webhookRoutes from './modules/webhooks/routes';
 
 // Load environment variables
 import path from 'path';
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+// .env dosyasını bulma alternatif yöntemleri
+const envPaths = [
+  path.resolve(__dirname, '../../../.env'),
+  path.resolve(__dirname, '../../.env'),
+  path.resolve(process.cwd(), '.env'),
+  '.env'
+];
+
+let envLoaded = false;
+for (const envPath of envPaths) {
+  try {
+    if (require('fs').existsSync(envPath)) {
+      dotenv.config({ path: envPath });
+      console.log('✅ .env dosyası yüklendi:', envPath);
+      envLoaded = true;
+      break;
+    }
+  } catch (error) {
+    // Devam et
+  }
+}
+
+if (!envLoaded) {
+  console.warn('⚠️ .env dosyası bulunamadı!');
+  dotenv.config(); // Varsayılan .env'i dene
+}
 
 // Debug environment variables
 console.log('🔍 Environment variables loaded:');
 console.log('🔍 CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? 'Var' : 'Yok');
 console.log('🔍 NODE_ENV:', process.env.NODE_ENV);
 console.log('🔍 PORT:', process.env.PORT);
+
+// Eğer CLERK_SECRET_KEY yoksa manuel set et
+if (!process.env.CLERK_SECRET_KEY) {
+  process.env.CLERK_SECRET_KEY = 'sk_test_VTLN3iCL1XcTT74SSEVKI3AWf8Ff9pEUjMG6gLEW0X';
+  console.log('🔧 CLERK_SECRET_KEY manuel olarak ayarlandı');
+}
 
 const app: express.Application = express();
 const server = createServer(app);
@@ -71,6 +103,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/forms', userFormRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {

@@ -2,6 +2,29 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../config/database';
 
+// Clerk API'den kullanıcı bilgisi çekmek için yardımcı fonksiyon
+async function fetchClerkUserEmail(clerkId: string): Promise<string | undefined> {
+  try {
+    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+    if (!clerkSecretKey) return undefined;
+
+    // Node 18+ içerisinde fetch yerleşik olarak bulunur
+    const response = await fetch(`https://api.clerk.dev/v1/users/${clerkId}`, {
+      headers: {
+        Authorization: `Bearer ${clerkSecretKey}`,
+      },
+    });
+
+    if (!response.ok) return undefined;
+    const data: any = await response.json();
+    const emailFromClerk: string | undefined = data?.primary_email_address?.email_address
+      || data?.email_addresses?.[0]?.email_address;
+    return emailFromClerk;
+  } catch (_err) {
+    return undefined;
+  }
+}
+
 export interface AuthRequest extends Request {
   user?: {
     id: string;
@@ -81,8 +104,8 @@ export const authenticateUser = async (
     console.log('🔍 Aranan clerkId:', decoded.sub);
     console.log('🔍 Aranan email:', decoded.email);
 
-    // Email'i token'dan al
-    let userEmail = decoded.email;
+    // Email'i token'dan al (yoksa Clerk API'den denenecek)
+    let userEmail = decoded.email as string | undefined;
     
     // Eğer token'da email yoksa, alternatif alanları kontrol et
     if (!userEmail) {
@@ -94,6 +117,15 @@ export const authenticateUser = async (
     }
     
     console.log('🔍 Token\'dan alınan email:', userEmail);
+
+    // Token'da email yoksa Clerk API'den çekmeyi dene
+    if (!userEmail) {
+      const emailFromClerk = await fetchClerkUserEmail(decoded.sub);
+      if (emailFromClerk) {
+        userEmail = emailFromClerk;
+        console.log('🔍 Clerk API\'den alınan email:', userEmail);
+      }
+    }
     
     // Kullanıcıyı veritabanından clerkId ile bul
     let user = await prisma.user.findUnique({
@@ -106,18 +138,78 @@ export const authenticateUser = async (
       },
     });
 
-    // Kullanıcı yoksa otomatik oluştur
-    if (!user) {
-      console.log('🔍 Kullanıcı bulunamadı, oluşturuluyor...');
-      console.log('🔍 Oluşturulacak kullanıcı bilgileri:');
-      console.log('  - clerkId:', decoded.sub);
-      console.log('  - email:', userEmail);
+    // Kullanıcı yoksa, önce email ile kontrol et
+    if (!user && userEmail) {
+      console.log('🔍 ClerkID ile kullanıcı bulunamadı, email ile kontrol ediliyor...');
       
-      // Email yoksa geçici email oluştur (daha sonra güncellenebilir)
-      if (!userEmail) {
-        console.warn('⚠️ Token\'da email bulunamadı, geçici email oluşturuluyor...');
-        userEmail = `temp_${decoded.sub}@rentify.com`;
+      // Email ile kullanıcı ara
+      const existingUserByEmail = await prisma.user.findUnique({
+        where: { email: userEmail },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          isActive: true,
+          clerkId: true,
+        },
+      });
+
+      if (existingUserByEmail) {
+        console.log('🔍 Email ile kullanıcı bulundu, ClerkID güncellenecek...');
+        console.log('  - Eski ClerkID:', existingUserByEmail.clerkId);
+        console.log('  - Yeni ClerkID:', decoded.sub);
+        
+        // ClerkID'yi güncelle
+        user = await prisma.user.update({
+          where: { id: existingUserByEmail.id },
+          data: { clerkId: decoded.sub },
+          select: {
+            id: true,
+            email: true,
+            role: true,
+            isActive: true,
+          },
+        });
+        
+        console.log('✅ ClerkID güncellendi:', user.email);
+      } else {
+        // Gerçekten yeni kullanıcı oluştur
+        console.log('🔍 Tamamen yeni kullanıcı oluşturuluyor...');
+        console.log('🔍 Oluşturulacak kullanıcı bilgileri:');
+        console.log('  - clerkId:', decoded.sub);
+        console.log('  - email:', userEmail);
+        
+        try {
+          user = await prisma.user.create({
+            data: {
+              clerkId: decoded.sub,
+              email: userEmail,
+              firstName: decoded.given_name || decoded.name?.split(' ')[0] || 'Kullanıcı',
+              lastName: decoded.family_name || decoded.name?.split(' ').slice(1).join(' ') || 'Adı',
+              // Tek admin kuralı: yalnızca admin@rentify.com ADMIN olabilir
+              role: userEmail === 'admin@rentify.com' ? 'ADMIN' : 'USER',
+              isActive: true,
+            },
+            select: {
+              id: true,
+              email: true,
+              role: true,
+              isActive: true,
+            },
+          });
+          
+          console.log('✅ Yeni kullanıcı oluşturuldu:', user.email);
+        } catch (createError) {
+          console.error('❌ Kullanıcı oluşturma hatası:', createError);
+          return res.status(500).json({
+            error: 'Kullanıcı oluşturulamadı',
+          });
+        }
       }
+    } else if (!user) {
+      // Email de yoksa geçici email ile oluştur
+      console.log('🔍 Email bulunamadı, geçici kullanıcı oluşturuluyor...');
+      userEmail = `temp_${decoded.sub}@rentify.com`;
       
       try {
         user = await prisma.user.create({
@@ -137,13 +229,30 @@ export const authenticateUser = async (
           },
         });
         
-        console.log('✅ Yeni kullanıcı oluşturuldu:', user.email);
+        console.log('✅ Geçici kullanıcı oluşturuldu:', user.email);
       } catch (createError) {
-        console.error('❌ Kullanıcı oluşturma hatası:', createError);
+        console.error('❌ Geçici kullanıcı oluşturma hatası:', createError);
         return res.status(500).json({
           error: 'Kullanıcı oluşturulamadı',
         });
       }
+    }
+
+    // Tek admin kuralını login anında uygula
+    if (user.email === 'admin@rentify.com' && user.role !== 'ADMIN') {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'ADMIN' },
+        select: { id: true, email: true, role: true, isActive: true },
+      });
+      console.log('👑 Tek admin kuralı uygulandı: admin@rentify.com ADMIN yapıldı');
+    } else if (user.email !== 'admin@rentify.com' && user.role === 'ADMIN') {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'USER' },
+        select: { id: true, email: true, role: true, isActive: true },
+      });
+      console.log('🔒 Tek admin kuralı uygulandı: ADMIN olmayan email indirildi -> USER');
     }
 
     if (!user.isActive) {
@@ -154,6 +263,11 @@ export const authenticateUser = async (
 
     req.user = user;
     console.log('🔍 Kullanıcı doğrulandı:', user.email);
+    console.log('🎯 KULLANICI DETAYI:', {
+      email: user.email,
+      role: user.role,
+      adminMi: user.role === 'ADMIN' ? 'EVET' : 'HAYIR'
+    });
     return next();
   } catch (error) {
     console.error('Auth middleware error:', error);
