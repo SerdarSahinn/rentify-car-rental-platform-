@@ -45,10 +45,16 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { user, isSignedIn } = useUser();
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'bookings' | 'forms' | 'messages' | 'approved'>('bookings');
+  const [activeTab, setActiveTab] = useState<'bookings' | 'forms' | 'messages' | 'approved' | 'vehicles'>('bookings');
   const [selectedForm, setSelectedForm] = useState<any>(null);
   const [showFormModal, setShowFormModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  
+  // Vehicle management states
+  const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Admin kontrolü - sadece admin@rentify.com giriş yapabilir
   useEffect(() => {
@@ -96,12 +102,32 @@ const AdminDashboard = () => {
     enabled: true // Her zaman çalışsın
   });
 
+  // Tüm araçları getir
+  const { data: vehiclesResponse, isLoading: vehiclesLoading } = useQuery({
+    queryKey: ['adminVehicles'],
+    queryFn: async () => {
+      console.log('🔍 Vehicles API çağrılıyor...');
+      const response = await fetch('http://localhost:3001/api/vehicles?limit=100');
+      console.log('🔍 Vehicles API response status:', response.status);
+      const data = await response.json();
+      console.log('🔍 Vehicles API response data:', data);
+      return data;
+    },
+    enabled: true // Her zaman çalışsın
+  });
+
   // Response yapısını kontrol et ve düzelt
   let bookings: Booking[] = [];
+  let vehicles: any[] = [];
   
   if (bookingsResponse) {
     // Eğer response.data varsa onu kullan, yoksa direkt response'u kullan
     bookings = (bookingsResponse.data || bookingsResponse || []) as Booking[];
+  }
+
+  if (vehiclesResponse) {
+    // Vehicles API response'unu işle
+    vehicles = (vehiclesResponse.data || vehiclesResponse || []) as any[];
   }
 
   // Debug logs - detaylı
@@ -122,6 +148,98 @@ const AdminDashboard = () => {
       queryClient.invalidateQueries({ queryKey: ['userBookings'] });
     },
   });
+
+  // Araç silme mutation
+  const deleteVehicleMutation = useMutation({
+    mutationFn: async (vehicleId: string) => {
+      const token = await window.Clerk?.session?.getToken();
+      const response = await fetch(`http://localhost:3001/api/vehicles/${vehicleId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) throw new Error('Araç silinirken hata oluştu');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminVehicles'] });
+      alert('✅ Araç başarıyla silindi!');
+    },
+    onError: (error) => {
+      console.error('Araç silme hatası:', error);
+      alert('❌ Araç silinirken hata oluştu!');
+    }
+  });
+
+  // Araç güncelleme mutation
+  const updateVehicleMutation = useMutation({
+    mutationFn: async ({ vehicleId, data }: { vehicleId: string; data: any }) => {
+      const token = await window.Clerk?.session?.getToken();
+      const response = await fetch(`http://localhost:3001/api/vehicles/${vehicleId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+      if (!response.ok) throw new Error('Araç güncellenirken hata oluştu');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminVehicles'] });
+      setShowEditModal(false);
+      setSelectedVehicle(null);
+      alert('✅ Araç başarıyla güncellendi!');
+    },
+    onError: (error) => {
+      console.error('Araç güncelleme hatası:', error);
+      alert('❌ Araç güncellenirken hata oluştu!');
+    }
+  });
+
+  // Yeni araç ekleme mutation
+  const createVehicleMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const token = await window.Clerk?.session?.getToken();
+      const response = await fetch(`http://localhost:3001/api/vehicles`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+      if (!response.ok) throw new Error('Araç eklenirken hata oluştu');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminVehicles'] });
+      setShowAddModal(false);
+      alert('✅ Araç başarıyla eklendi!');
+    },
+    onError: (error) => {
+      console.error('Araç ekleme hatası:', error);
+      alert('❌ Araç eklenirken hata oluştu!');
+    }
+  });
+
+  // Helper functions
+  const handleDeleteVehicle = (vehicle: any) => {
+    if (window.confirm(`"${vehicle.brand} ${vehicle.model}" aracını silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz ve araç veritabanından tamamen silinecektir.`)) {
+      setIsDeleting(true);
+      deleteVehicleMutation.mutate(vehicle.id, {
+        onSettled: () => setIsDeleting(false)
+      });
+    }
+  };
+
+  const handleEditVehicle = (vehicle: any) => {
+    setSelectedVehicle(vehicle);
+    setShowEditModal(true);
+  };
 
   // Durum filtreleme
   const filteredBookings = bookings.filter((booking: Booking) => {
@@ -390,6 +508,20 @@ const AdminDashboard = () => {
                 <div className="flex items-center space-x-2">
                   <MessageSquare className="h-5 w-5" />
                   <span>Bildirimler</span>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setActiveTab('vehicles')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'vehicles'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <Car className="h-5 w-5" />
+                  <span>Araçlar</span>
                 </div>
               </button>
             </nav>
@@ -730,8 +862,950 @@ const AdminDashboard = () => {
             </div>
           </div>
         )}
+
+        {/* Araçlar Yönetimi */}
+        {activeTab === 'vehicles' && (
+          <div className="space-y-6">
+            {/* Üst Kısım - İstatistikler ve Yeni Araç Butonu */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900">Araç Yönetimi</h2>
+                  <button 
+                    onClick={() => setShowAddModal(true)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                  >
+                    <Car className="h-4 w-4" />
+                    <span>Yeni Araç Ekle</span>
+                  </button>
+                </div>
+              </div>
+              
+              {/* İstatistik Kartları */}
+              <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <Car className="h-8 w-8 text-blue-600" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600">Toplam Araç</p>
+                      <p className="text-2xl font-bold text-gray-900">{vehicles.length}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <CheckCircle className="h-8 w-8 text-green-600" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600">Aktif Araç</p>
+                      <p className="text-2xl font-bold text-gray-900">{vehicles.filter(v => v.isAvailable).length}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-yellow-50 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <Clock className="h-8 w-8 text-yellow-600" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600">Kiralanan</p>
+                      <p className="text-2xl font-bold text-gray-900">{vehicles.filter(v => !v.isAvailable).length}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <XCircle className="h-8 w-8 text-red-600" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600">Öne Çıkan</p>
+                      <p className="text-2xl font-bold text-gray-900">{vehicles.filter(v => v.isFeatured).length}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Araçlar Tablosu */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Mevcut Araçlar</h3>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="text"
+                      placeholder="Araç ara..."
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                    <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                      <option value="">Tüm Markalar</option>
+                      <option value="BMW">BMW</option>
+                      <option value="Mercedes">Mercedes</option>
+                      <option value="Audi">Audi</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Araç
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Kategori
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Fiyat
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Durum
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        İşlemler
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {vehiclesLoading ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                          Araçlar yükleniyor...
+                        </td>
+                      </tr>
+                    ) : vehicles.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                          Henüz araç bulunmuyor.
+                        </td>
+                      </tr>
+                    ) : (
+                      vehicles.map((vehicle, index) => {
+                        // Images'ı parse et
+                        let images = [];
+                        try {
+                          images = typeof vehicle.images === 'string' ? JSON.parse(vehicle.images) : vehicle.images || [];
+                        } catch (e) {
+                          images = [];
+                        }
+                        
+                        const firstImage = images[0] || 'https://images.unsplash.com/photo-1555215695-3004980ad54e?w=300';
+                        
+                        return (
+                          <tr key={vehicle.id || index}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="h-16 w-16 flex-shrink-0">
+                                  <img 
+                                    className="h-16 w-16 rounded-lg object-cover" 
+                                    src={firstImage} 
+                                    alt={`${vehicle.brand} ${vehicle.model}`}
+                                    onError={(e) => {
+                                      e.currentTarget.src = 'https://images.unsplash.com/photo-1555215695-3004980ad54e?w=300';
+                                    }}
+                                  />
+                                </div>
+                                <div className="ml-4">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {vehicle.brand} {vehicle.model}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {vehicle.year} • {vehicle.transmission} • {vehicle.seats} Koltuk
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                vehicle.category === 'Lüks' ? 'bg-blue-100 text-blue-800' :
+                                vehicle.category === 'Premium' ? 'bg-purple-100 text-purple-800' :
+                                vehicle.category === 'Ekonomik' ? 'bg-green-100 text-green-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {vehicle.category}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              ₺{vehicle.dailyPrice?.toFixed(2)}/gün
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                vehicle.isAvailable 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {vehicle.isAvailable ? 'Aktif' : 'Kiralanan'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <button 
+                                onClick={() => handleEditVehicle(vehicle)}
+                                className="text-blue-600 hover:text-blue-900 mr-3 disabled:opacity-50"
+                                disabled={updateVehicleMutation.isPending}
+                              >
+                                {updateVehicleMutation.isPending && selectedVehicle?.id === vehicle.id ? 'Güncelleniyor...' : 'Düzenle'}
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteVehicle(vehicle)}
+                                className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                                disabled={deleteVehicleMutation.isPending || isDeleting}
+                              >
+                                {deleteVehicleMutation.isPending && isDeleting ? 'Siliniyor...' : 'Sil'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Edit Vehicle Modal */}
+      {showEditModal && selectedVehicle && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Araç Düzenle</h2>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setSelectedVehicle(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <EditVehicleForm 
+              vehicle={selectedVehicle}
+              onSubmit={(data) => {
+                updateVehicleMutation.mutate({ 
+                  vehicleId: selectedVehicle.id, 
+                  data 
+                });
+              }}
+              onCancel={() => {
+                setShowEditModal(false);
+                setSelectedVehicle(null);
+              }}
+              isLoading={updateVehicleMutation.isPending}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Add Vehicle Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Yeni Araç Ekle</h2>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <AddVehicleForm 
+              onSubmit={(data) => {
+                createVehicleMutation.mutate(data);
+              }}
+              onCancel={() => setShowAddModal(false)}
+              isLoading={createVehicleMutation.isPending}
+            />
+          </div>
+        </div>
+      )}
     </div>
+  );
+};
+
+// EditVehicleForm Component
+const EditVehicleForm = ({ vehicle, onSubmit, onCancel, isLoading }: {
+  vehicle: any;
+  onSubmit: (data: any) => void;
+  onCancel: () => void;
+  isLoading: boolean;
+}) => {
+  const [formData, setFormData] = useState({
+    brand: vehicle.brand || '',
+    model: vehicle.model || '',
+    year: vehicle.year || 2024,
+    category: vehicle.category || '',
+    fuelType: vehicle.fuelType || '',
+    transmission: vehicle.transmission || '',
+    seats: vehicle.seats || 5,
+    dailyPrice: vehicle.dailyPrice || 0,
+    weeklyPrice: vehicle.weeklyPrice || 0,
+    monthlyPrice: vehicle.monthlyPrice || 0,
+    description: vehicle.description || '',
+    location: vehicle.location || '',
+    isAvailable: vehicle.isAvailable ?? true,
+    isFeatured: vehicle.isFeatured ?? false,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Sayısal değerleri number'a çevir
+    const submitData = {
+      ...formData,
+      year: Number(formData.year),
+      seats: Number(formData.seats),
+      dailyPrice: Number(formData.dailyPrice),
+      weeklyPrice: formData.weeklyPrice ? Number(formData.weeklyPrice) : null,
+      monthlyPrice: formData.monthlyPrice ? Number(formData.monthlyPrice) : null,
+    };
+    
+    onSubmit(submitData);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+    }));
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Marka</label>
+          <input
+            type="text"
+            name="brand"
+            value={formData.brand}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+          <input
+            type="text"
+            name="model"
+            value={formData.model}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Yıl</label>
+          <input
+            type="number"
+            name="year"
+            value={formData.year}
+            onChange={handleInputChange}
+            min="2000"
+            max="2030"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+          <select
+            name="category"
+            value={formData.category}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          >
+            <option value="">Seçin</option>
+            <option value="Ekonomik">Ekonomik</option>
+            <option value="Orta">Orta</option>
+            <option value="Lüks">Lüks</option>
+            <option value="Premium">Premium</option>
+            <option value="SUV">SUV</option>
+            <option value="Minivan">Minivan</option>
+          </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Koltuk</label>
+          <input
+            type="number"
+            name="seats"
+            value={formData.seats}
+            onChange={handleInputChange}
+            min="2"
+            max="9"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Yakıt Türü</label>
+          <select
+            name="fuelType"
+            value={formData.fuelType}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          >
+            <option value="">Seçin</option>
+            <option value="Benzin">Benzin</option>
+            <option value="Dizel">Dizel</option>
+            <option value="Elektrik">Elektrik</option>
+            <option value="Hibrit">Hibrit</option>
+            <option value="LPG">LPG</option>
+          </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Vites</label>
+          <select
+            name="transmission"
+            value={formData.transmission}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          >
+            <option value="">Seçin</option>
+            <option value="Manuel">Manuel</option>
+            <option value="Otomatik">Otomatik</option>
+            <option value="Yarı Otomatik">Yarı Otomatik</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Günlük Fiyat (₺)</label>
+          <input
+            type="number"
+            name="dailyPrice"
+            value={formData.dailyPrice}
+            onChange={handleInputChange}
+            min="0"
+            step="0.01"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Haftalık Fiyat (₺)</label>
+          <input
+            type="number"
+            name="weeklyPrice"
+            value={formData.weeklyPrice}
+            onChange={handleInputChange}
+            min="0"
+            step="0.01"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Aylık Fiyat (₺)</label>
+          <input
+            type="number"
+            name="monthlyPrice"
+            value={formData.monthlyPrice}
+            onChange={handleInputChange}
+            min="0"
+            step="0.01"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Lokasyon</label>
+        <input
+          type="text"
+          name="location"
+          value={formData.location}
+          onChange={handleInputChange}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          placeholder="İstanbul, Türkiye"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama</label>
+        <textarea
+          name="description"
+          value={formData.description}
+          onChange={handleInputChange}
+          rows={3}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          placeholder="Araç hakkında açıklama..."
+        />
+      </div>
+
+      <div className="flex items-center space-x-4">
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            name="isAvailable"
+            checked={formData.isAvailable}
+            onChange={handleInputChange}
+            className="mr-2"
+          />
+          <span className="text-sm text-gray-700">Kiralama için müsait</span>
+        </label>
+        
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            name="isFeatured"
+            checked={formData.isFeatured}
+            onChange={handleInputChange}
+            className="mr-2"
+          />
+          <span className="text-sm text-gray-700">Öne çıkan araç</span>
+        </label>
+      </div>
+
+      <div className="flex justify-end space-x-3 pt-4 border-t">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+          disabled={isLoading}
+        >
+          İptal
+        </button>
+        <button
+          type="submit"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          disabled={isLoading}
+        >
+          {isLoading ? 'Güncelleniyor...' : 'Güncelle'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+// AddVehicleForm Component
+const AddVehicleForm = ({ onSubmit, onCancel, isLoading }: {
+  onSubmit: (data: any) => void;
+  onCancel: () => void;
+  isLoading: boolean;
+}) => {
+  const [formData, setFormData] = useState({
+    brand: '',
+    model: '',
+    year: 2024,
+    category: '',
+    fuelType: '',
+    transmission: '',
+    seats: 5,
+    dailyPrice: 0,
+    weeklyPrice: 0,
+    monthlyPrice: 0,
+    description: '',
+    location: 'İstanbul, Türkiye',
+    isAvailable: true,
+    isFeatured: false,
+    features: ['Klima', 'ABS', 'Airbag'],
+    images: []
+  });
+  
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Resimleri base64'e çevir
+    const imageUrls: string[] = [];
+    for (const file of imageFiles) {
+      try {
+        const base64 = await convertToBase64(file);
+        imageUrls.push(base64);
+      } catch (error) {
+        console.error('Resim yükleme hatası:', error);
+        alert('Resim yüklenirken hata oluştu!');
+        return;
+      }
+    }
+    
+    // Sayısal değerleri number'a çevir
+    const submitData = {
+      ...formData,
+      year: Number(formData.year),
+      seats: Number(formData.seats),
+      dailyPrice: Number(formData.dailyPrice),
+      weeklyPrice: formData.weeklyPrice ? Number(formData.weeklyPrice) : null,
+      monthlyPrice: formData.monthlyPrice ? Number(formData.monthlyPrice) : null,
+      images: imageUrls // Resimleri ekle
+    };
+    
+    onSubmit(submitData);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+    }));
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    // Dosya sayısı kontrolü (maksimum 5 resim)
+    if (imageFiles.length + files.length > 5) {
+      alert('Maksimum 5 resim yükleyebilirsiniz!');
+      return;
+    }
+    
+    // Dosya türü kontrolü
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const invalidFiles = files.filter(file => !validTypes.includes(file.type));
+    
+    if (invalidFiles.length > 0) {
+      alert('Sadece JPG, JPEG, PNG ve WebP formatlarında resim yükleyebilirsiniz!');
+      return;
+    }
+    
+    // Dosya boyutu kontrolü (maksimum 5MB per resim)
+    const oversizedFiles = files.filter(file => file.size > 5 * 1024 * 1024);
+    if (oversizedFiles.length > 0) {
+      alert('Her resim maksimum 5MB olabilir!');
+      return;
+    }
+    
+    // Dosyaları ekle
+    setImageFiles(prev => [...prev, ...files]);
+    
+    // Preview URL'lerini oluştur
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreviews(prev => [...prev, e.target?.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const convertToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Marka *</label>
+          <input
+            type="text"
+            name="brand"
+            value={formData.brand}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            placeholder="BMW, Mercedes, Audi..."
+            required
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
+          <input
+            type="text"
+            name="model"
+            value={formData.model}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            placeholder="3 Series, C-Class, A4..."
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Yıl *</label>
+          <input
+            type="number"
+            name="year"
+            value={formData.year}
+            onChange={handleInputChange}
+            min="2000"
+            max="2030"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Kategori *</label>
+          <select
+            name="category"
+            value={formData.category}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          >
+            <option value="">Seçin</option>
+            <option value="Ekonomik">Ekonomik</option>
+            <option value="Orta">Orta</option>
+            <option value="Lüks">Lüks</option>
+            <option value="Premium">Premium</option>
+            <option value="SUV">SUV</option>
+            <option value="Minivan">Minivan</option>
+          </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Koltuk *</label>
+          <input
+            type="number"
+            name="seats"
+            value={formData.seats}
+            onChange={handleInputChange}
+            min="2"
+            max="9"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Yakıt Türü *</label>
+          <select
+            name="fuelType"
+            value={formData.fuelType}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          >
+            <option value="">Seçin</option>
+            <option value="Benzin">Benzin</option>
+            <option value="Dizel">Dizel</option>
+            <option value="Elektrik">Elektrik</option>
+            <option value="Hibrit">Hibrit</option>
+            <option value="LPG">LPG</option>
+          </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Vites *</label>
+          <select
+            name="transmission"
+            value={formData.transmission}
+            onChange={handleInputChange}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            required
+          >
+            <option value="">Seçin</option>
+            <option value="Manuel">Manuel</option>
+            <option value="Otomatik">Otomatik</option>
+            <option value="Yarı Otomatik">Yarı Otomatik</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Günlük Fiyat (₺) *</label>
+          <input
+            type="number"
+            name="dailyPrice"
+            value={formData.dailyPrice}
+            onChange={handleInputChange}
+            min="0"
+            step="0.01"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            placeholder="250.00"
+            required
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Haftalık Fiyat (₺)</label>
+          <input
+            type="number"
+            name="weeklyPrice"
+            value={formData.weeklyPrice}
+            onChange={handleInputChange}
+            min="0"
+            step="0.01"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            placeholder="1500.00"
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Aylık Fiyat (₺)</label>
+          <input
+            type="number"
+            name="monthlyPrice"
+            value={formData.monthlyPrice}
+            onChange={handleInputChange}
+            min="0"
+            step="0.01"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            placeholder="6000.00"
+          />
+        </div>
+      </div>
+
+      {/* Resim Yükleme Alanı */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Araç Resimleri</label>
+        <div className="space-y-3">
+          {/* Upload Area */}
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+            <div className="text-center">
+              <div className="mx-auto h-12 w-12 text-gray-400">📷</div>
+              <div className="mt-2">
+                <label htmlFor="image-upload" className="cursor-pointer">
+                  <span className="text-sm text-blue-600 hover:text-blue-500">
+                    Resim seç
+                  </span>
+                  <input
+                    id="image-upload"
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    onChange={handleImageUpload}
+                    className="sr-only"
+                  />
+                </label>
+                <span className="text-sm text-gray-500"> veya sürükle bırak</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                JPG, PNG, WebP formatları • Maksimum 5 resim • Her biri 5MB'dan küçük
+              </p>
+            </div>
+          </div>
+
+          {/* Image Previews */}
+          {imagePreviews.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {imagePreviews.map((preview, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={preview}
+                    alt={`Preview ${index + 1}`}
+                    className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </button>
+                  {index === 0 && (
+                    <div className="absolute bottom-1 left-1 bg-blue-600 text-white text-xs px-2 py-1 rounded">
+                      Ana resim
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Lokasyon</label>
+        <input
+          type="text"
+          name="location"
+          value={formData.location}
+          onChange={handleInputChange}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          placeholder="İstanbul, Türkiye"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama</label>
+        <textarea
+          name="description"
+          value={formData.description}
+          onChange={handleInputChange}
+          rows={3}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          placeholder="Araç hakkında detaylı açıklama yazın..."
+        />
+      </div>
+
+      <div className="flex items-center space-x-4">
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            name="isAvailable"
+            checked={formData.isAvailable}
+            onChange={handleInputChange}
+            className="mr-2"
+          />
+          <span className="text-sm text-gray-700">Kiralama için müsait</span>
+        </label>
+        
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            name="isFeatured"
+            checked={formData.isFeatured}
+            onChange={handleInputChange}
+            className="mr-2"
+          />
+          <span className="text-sm text-gray-700">Öne çıkan araç</span>
+        </label>
+      </div>
+
+
+
+      <div className="flex justify-end space-x-3 pt-4 border-t">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+          disabled={isLoading}
+        >
+          İptal
+        </button>
+        <button
+          type="submit"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          disabled={isLoading}
+        >
+          {isLoading ? 'Ekleniyor...' : 'Araç Ekle'}
+        </button>
+      </div>
+    </form>
   );
 };
 
