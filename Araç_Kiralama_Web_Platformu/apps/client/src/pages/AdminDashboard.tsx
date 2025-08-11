@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
@@ -12,9 +12,14 @@ import {
   Eye,
   MessageSquare,
   FileText,
-  X
+  X,
+  MessageCircle,
+  Star,
+  Trash2
 } from 'lucide-react';
 import { getAllBookings, updateBookingStatus } from '../services/bookingApi';
+import { getAllReviews, deleteReview } from '../services/reviewApi';
+import ThemeToggle from '../components/ThemeToggle';
 
 interface Booking {
   id: string;
@@ -40,12 +45,27 @@ interface Booking {
   };
 }
 
+interface Reply {
+  id: string;
+  userId: string;
+  reviewId: string;
+  parentReplyId?: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    firstName: string | null;
+    lastName: string | null;
+    avatar: string | null;
+  };
+}
+
 const AdminDashboard = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { user, isSignedIn } = useUser();
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'bookings' | 'forms' | 'messages' | 'approved' | 'vehicles'>('bookings');
+  const [activeTab, setActiveTab] = useState<'bookings' | 'forms' | 'messages' | 'approved' | 'vehicles' | 'reviews'>('bookings');
   const [selectedForm, setSelectedForm] = useState<any>(null);
   const [showFormModal, setShowFormModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -55,6 +75,19 @@ const AdminDashboard = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Toast notification state
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'info';
+    visible: boolean;
+  } | null>(null);
+
+  // Toast gösterme fonksiyonu
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+    setToast({ message, type, visible: true });
+    setTimeout(() => setToast(null), 3000); // 3 saniye sonra otomatik kapat
+  };
 
   // Admin kontrolü - sadece admin@rentify.com giriş yapabilir
   useEffect(() => {
@@ -116,9 +149,18 @@ const AdminDashboard = () => {
     enabled: true // Her zaman çalışsın
   });
 
+  // Tüm yorumları getir
+  const { data: reviewsResponse, isLoading: reviewsLoading } = useQuery({
+    queryKey: ['adminReviews'],
+    queryFn: getAllReviews,
+  });
+
+
+
   // Response yapısını kontrol et ve düzelt
   let bookings: Booking[] = [];
   let vehicles: any[] = [];
+  let reviews: any[] = [];
   
   if (bookingsResponse) {
     // Eğer response.data varsa onu kullan, yoksa direkt response'u kullan
@@ -128,6 +170,10 @@ const AdminDashboard = () => {
   if (vehiclesResponse) {
     // Vehicles API response'unu işle
     vehicles = (vehiclesResponse.data || vehiclesResponse || []) as any[];
+  }
+
+  if (reviewsResponse) {
+    reviews = reviewsResponse;
   }
 
   // Debug logs - detaylı
@@ -170,6 +216,44 @@ const AdminDashboard = () => {
     onError: (error) => {
       console.error('Araç silme hatası:', error);
       alert('❌ Araç silinirken hata oluştu!');
+    }
+  });
+
+  // Yorum silme mutation
+  const deleteReviewMutation = useMutation({
+    mutationFn: deleteReview,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminReviews'] });
+      alert('✅ Yorum başarıyla silindi!');
+    },
+    onError: (error) => {
+      console.error('Yorum silme hatası:', error);
+      alert('❌ Yorum silinirken hata oluştu!');
+    }
+  });
+
+  // Yanıt silme mutation
+  const deleteReplyMutation = useMutation({
+    mutationFn: async (replyId: string) => {
+      const token = await window.Clerk?.session?.getToken();
+      const response = await fetch(`http://localhost:3001/api/reviews/replies/${replyId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) throw new Error('Yanıt silinirken hata oluştu');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminReviews'] });
+      // Toast notification göster
+      showToast('✅ Yanıt başarıyla silindi!', 'success');
+    },
+    onError: (error) => {
+      console.error('Yanıt silme hatası:', error);
+      showToast('❌ Yanıt silinirken hata oluştu!', 'error');
     }
   });
 
@@ -293,6 +377,8 @@ const AdminDashboard = () => {
   const handleStatusUpdate = (bookingId: string, newStatus: string) => {
     updateStatusMutation.mutate({ id: bookingId, status: newStatus });
   };
+
+
 
   const handleFormApproval = async (formId: string, isApproved: boolean, rejectionReason: string = '') => {
     try {
@@ -422,26 +508,41 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${
+          toast.type === 'success' 
+            ? 'bg-green-500 text-white' 
+            : toast.type === 'error' 
+            ? 'bg-red-500 text-white' 
+            : 'bg-blue-500 text-white'
+        }`}>
+          <div className="flex items-center space-x-2">
+            <span className="text-sm font-medium">{toast.message}</span>
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 text-white hover:text-gray-200 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Car className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-                <p className="text-sm text-gray-600">Kiralama Yönetimi</p>
-              </div>
+          <div className="flex justify-between items-center py-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Rentify Admin</h1>
+              <p className="text-gray-600 dark:text-gray-300">Yönetim Paneli</p>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                Admin: {user?.emailAddresses[0]?.emailAddress}
-              </span>
+              <span className="text-gray-700 dark:text-gray-300">Admin: admin@rentify.com</span>
+              <ThemeToggle />
               <button
                 onClick={() => navigate('/')}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
               >
                 Ana Sayfaya Dön
               </button>
@@ -452,15 +553,15 @@ const AdminDashboard = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Tab Navigation */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="border-b border-gray-200">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900 mb-6">
+          <div className="border-b border-gray-200 dark:border-gray-700">
             <nav className="flex space-x-8 px-6">
               <button
                 onClick={() => setActiveTab('bookings')}
                 className={`py-4 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'bookings'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 <div className="flex items-center space-x-2">
@@ -524,6 +625,22 @@ const AdminDashboard = () => {
                   <span>Araçlar</span>
                 </div>
               </button>
+
+              <button
+                onClick={() => setActiveTab('reviews')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'reviews'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <MessageCircle className="h-5 w-5" />
+                  <span>Yorumlar ({reviews.length})</span>
+                </div>
+              </button>
+
+
             </nav>
           </div>
         </div>
@@ -1064,6 +1181,264 @@ const AdminDashboard = () => {
             </div>
           </div>
         )}
+
+        {/* Yorumlar Yönetimi */}
+        {activeTab === 'reviews' && (
+          <div className="space-y-6">
+            {/* Üst Kısım - İstatistikler */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Yorum Yönetimi</h2>
+                  <div className="flex items-center space-x-2">
+                    <MessageCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <span className="text-sm text-gray-600 dark:text-gray-300">Toplam {reviews.length} yorum</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* İstatistik Kartları */}
+              <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <MessageCircle className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Toplam Yorum</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{reviews.length}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <Star className="h-8 w-8 text-green-600 dark:text-green-400" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-300">5 Yıldız</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{reviews.filter(r => r.rating === 5).length}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <Star className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-300">4-5 Yıldız</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{reviews.filter(r => r.rating >= 4).length}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <Star className="h-8 w-8 text-red-600 dark:text-red-400" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-300">1-2 Yıldız</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{reviews.filter(r => r.rating <= 2).length}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Yorumlar Tablosu */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Tüm Yorumlar</h3>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="text"
+                      placeholder="Yorum ara..."
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                    <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                      <option value="">Tüm Rating'ler</option>
+                      <option value="5">5 Yıldız</option>
+                      <option value="4">4 Yıldız</option>
+                      <option value="3">3 Yıldız</option>
+                      <option value="2">2 Yıldız</option>
+                      <option value="1">1 Yıldız</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Kullanıcı
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Araç
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Rating
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Yorum
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Tarih
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        İşlemler
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {reviewsLoading ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center">
+                          <div className="flex justify-center items-center">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                            <span className="ml-2 text-gray-500">Yorumlar yükleniyor...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : reviews.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                          Henüz yorum bulunmuyor
+                        </td>
+                      </tr>
+                    ) : (
+                      reviews.map((review) => (
+                        <React.Fragment key={review.id}>
+                          {/* Ana Yorum Satırı */}
+                          <tr className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <span className="text-blue-600 font-medium text-sm">
+                                    {review.user.firstName?.[0] || review.user.lastName?.[0] || 'U'}
+                                  </span>
+                                </div>
+                                <div className="ml-3">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {review.user.firstName && review.user.lastName
+                                      ? `${review.user.firstName} ${review.user.lastName}`
+                                      : 'Anonim Kullanıcı'
+                                    }
+                                  </div>
+                                  <div className="text-sm text-gray-500">{review.user.email}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">
+                                {review.vehicle.brand} {review.vehicle.model} ({review.vehicle.year})
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center space-x-1">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <Star
+                                    key={star}
+                                    className={`w-4 h-4 ${
+                                      star <= review.rating
+                                        ? 'fill-yellow-400 text-yellow-400'
+                                        : 'text-gray-300'
+                                    }`}
+                                  />
+                                ))}
+                                <span className="ml-2 text-sm text-gray-600">({review.rating})</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-gray-900 max-w-xs truncate">
+                                {review.comment}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {new Date(review.createdAt).toLocaleDateString('tr-TR')}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <button
+                                onClick={() => deleteReviewMutation.mutate(review.id)}
+                                className="text-red-600 hover:text-red-900 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                                title="Yorumu Sil"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                          
+                          {/* Yanıtlar Satırı */}
+                          {review.replies && review.replies.length > 0 && (
+                            <tr className="bg-gray-50">
+                              <td colSpan={6} className="px-6 py-4">
+                                <div className="ml-8 space-y-3">
+                                  <div className="flex items-center space-x-2 mb-3">
+                                    <MessageCircle className="h-4 w-4 text-blue-600" />
+                                    <span className="text-sm font-medium text-gray-700">
+                                      Yanıtlar ({review.replies.length})
+                                    </span>
+                                  </div>
+                                  
+                                  {review.replies.map((reply: Reply) => (
+                                    <div key={reply.id} className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                          <div className="flex items-center space-x-2 mb-2">
+                                            <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+                                              <span className="text-green-600 font-medium text-xs">
+                                                {reply.user.firstName?.[0] || reply.user.lastName?.[0] || 'U'}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <div className="text-sm font-medium text-gray-900">
+                                                {reply.user.firstName && reply.user.lastName
+                                                  ? `${reply.user.firstName} ${reply.user.lastName}`
+                                                  : 'Anonim Kullanıcı'
+                                                }
+                                              </div>
+                                              <div className="text-xs text-gray-500">
+                                                {new Date(reply.createdAt).toLocaleDateString('tr-TR')}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <p className="text-sm text-gray-700 ml-8">
+                                            {reply.content}
+                                          </p>
+                                        </div>
+                                        
+                                        {/* Yanıt Silme Butonu */}
+                                        <button
+                                          onClick={() => {
+                                            if (window.confirm('Bu yanıtı silmek istediğinizden emin misiniz?')) {
+                                              deleteReplyMutation.mutate(reply.id);
+                                            }
+                                          }}
+                                          disabled={deleteReplyMutation.isPending}
+                                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors ml-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                          title="Yanıtı Sil"
+                                        >
+                                          {deleteReplyMutation.isPending ? (
+                                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-500"></div>
+                                          ) : (
+                                            <Trash2 className="w-3 h-3" />
+                                          )}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Edit Vehicle Modal */}

@@ -123,31 +123,31 @@ const ProfilePage = () => {
   return (
     <div className="space-y-8">
       {/* Profile Header */}
-      <div className="bg-white rounded-2xl p-8 shadow-lg">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg dark:shadow-gray-900">
         <div className="flex items-center space-x-6">
           <div className="w-20 h-20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
             <User className="h-10 w-10 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               {user.firstName} {user.lastName}
             </h1>
-            <p className="text-gray-600">{user.emailAddresses[0]?.emailAddress}</p>
-            <p className="text-sm text-gray-500">Üye olma: {user.createdAt ? new Date(user.createdAt).toLocaleDateString('tr-TR') : 'Bilinmiyor'}</p>
+            <p className="text-gray-600 dark:text-gray-300">{user.emailAddresses[0]?.emailAddress}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Üye olma: {user.createdAt ? new Date(user.createdAt).toLocaleDateString('tr-TR') : 'Bilinmiyor'}</p>
           </div>
         </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="bg-white rounded-2xl shadow-lg">
-        <div className="border-b border-gray-200">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg dark:shadow-gray-900">
+        <div className="border-b border-gray-200 dark:border-gray-700">
           <nav className="flex space-x-8 px-8">
             <button
               onClick={() => setActiveTab('overview')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'overview'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               }`}
             >
               <div className="flex items-center">
@@ -159,8 +159,8 @@ const ProfilePage = () => {
               onClick={() => setActiveTab('bookings')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'bookings'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               }`}
             >
               <div className="flex items-center">
@@ -172,8 +172,8 @@ const ProfilePage = () => {
               onClick={() => setActiveTab('messages')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium ${
                 activeTab === 'messages'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-blue-600 dark:bg-blue-500 text-white'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
             >
               <MessageSquare className="h-5 w-5" />
@@ -188,8 +188,8 @@ const ProfilePage = () => {
               onClick={() => setActiveTab('forms')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'forms'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               }`}
             >
               <div className="flex items-center">
@@ -340,21 +340,25 @@ const ProfilePage = () => {
 
           {activeTab === 'messages' && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Mesajlar</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Mesajlar</h3>
               {notifications.length === 0 ? (
                 <div className="text-center py-8">
                   <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">Henüz mesajınız yok.</p>
+                  <p className="text-gray-500 dark:text-gray-400">Henüz mesajınız yok.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {notifications.map((notification: any) => (
-                    <div key={notification.id} className={`p-4 rounded-lg border ${notification.isRead ? 'bg-gray-50' : 'bg-blue-50 border-blue-200'} relative`}>
+                    <div key={notification.id} className={`p-4 rounded-lg border ${
+                      notification.isRead 
+                        ? 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600' 
+                        : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-600'
+                    } relative`}>
                       <div className="flex items-start justify-between">
                         <div className="flex-1 pr-8">
-                          <h4 className="font-medium text-gray-900">{notification.title}</h4>
-                          <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
-                          <p className="text-xs text-gray-400 mt-2">
+                          <h4 className="font-medium text-gray-900 dark:text-white">{notification.title}</h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{notification.message}</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
                             {new Date(notification.createdAt).toLocaleDateString('tr-TR')}
                           </p>
                           
@@ -364,7 +368,7 @@ const ProfilePage = () => {
                            JSON.parse(notification.data).status === 'FORM_REQUIRED' && (
                             <button
                               onClick={() => navigate(`/forms/${JSON.parse(notification.data).bookingId}`)}
-                              className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                              className="mt-3 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 text-sm"
                             >
                               Formu Doldur
                             </button>
@@ -375,17 +379,17 @@ const ProfilePage = () => {
                             (notification.type === 'BOOKING_STATUS' && 
                              notification.data && 
                              ['FORM_PENDING', 'FORM_APPROVED'].includes(JSON.parse(notification.data).status))) && (
-                            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-600 rounded-lg">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center">
-                                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
-                                  <span className="text-sm text-green-800 font-medium">Form Gönderildi</span>
+                                  <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mr-2" />
+                                  <span className="text-sm text-green-800 dark:text-green-200 font-medium">Form Gönderildi</span>
                                 </div>
-                                <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
+                                <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-800 px-2 py-1 rounded">
                                   ✓ Tamamlandı
                                 </span>
                               </div>
-                              <p className="text-xs text-green-600 mt-1">
+                              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                                 Formunuz başarıyla gönderildi ve admin tarafından inceleniyor.
                               </p>
                             </div>
@@ -393,12 +397,12 @@ const ProfilePage = () => {
                           
                           {/* Form gönderildi notification'ı */}
                           {notification.type === 'FORM_SUBMITTED' && (
-                            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-600 rounded-lg">
                               <div className="flex items-center">
-                                <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
-                                <span className="text-sm text-green-800 font-medium">Form Başarıyla Gönderildi</span>
+                                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mr-2" />
+                                <span className="text-sm text-green-800 dark:text-green-200 font-medium">Form Başarıyla Gönderildi</span>
                               </div>
-                              <p className="text-xs text-green-600 mt-1">Admin tarafından incelendikten sonra size bilgi verilecek.</p>
+                              <p className="text-xs text-green-600 dark:text-green-400 mt-1">Admin tarafından incelendikten sonra size bilgi verilecek.</p>
                             </div>
                           )}
                         </div>
@@ -406,7 +410,7 @@ const ProfilePage = () => {
                         {/* Silme butonu */}
                         <button
                           onClick={() => deleteNotification(notification.id)}
-                          className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                          className="absolute top-2 right-2 p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
                           title="Mesajı sil"
                         >
                           <X className="h-4 w-4" />

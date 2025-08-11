@@ -234,22 +234,34 @@ const VehiclesPage = () => {
 
 
 
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col justify-between h-24">
+            <div className="flex flex-col">
               <span className="text-2xl font-bold text-primary-600">
                 {formatPrice(vehicle.dailyPrice)}
               </span>
               <span className="text-sm text-gray-500">/gün</span>
             </div>
-            <button 
-              className={`btn btn-sm ${vehicle.isAvailable === false ? 'btn-disabled' : 'btn-primary'}`}
-              disabled={vehicle.isAvailable === false}
-              onClick={() => requireAuth(() => {
-                navigate(`/vehicles/${vehicle.id}/book`);
-              })}
-            >
-              {vehicle.isAvailable === false ? 'Dolu' : 'Kirala'}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 w-full">
+              <button 
+                className="btn btn-primary btn-sm w-full sm:w-auto text-sm px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white border-0"
+                onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+              >
+                Detaylar
+              </button>
+              <button 
+                className={`btn btn-sm w-full sm:w-auto text-sm px-4 py-2 ${
+                  vehicle.isAvailable === false 
+                    ? 'btn-disabled opacity-50 bg-gray-400 text-white border-0' 
+                    : 'btn-primary bg-green-600 hover:bg-green-700 text-white border-0'
+                }`}
+                disabled={vehicle.isAvailable === false}
+                onClick={() => requireAuth(() => {
+                  navigate(`/vehicles/${vehicle.id}/book`);
+                })}
+              >
+                {vehicle.isAvailable === false ? 'Dolu' : 'Kirala'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -260,16 +272,61 @@ const VehiclesPage = () => {
   const { data: vehicles, isLoading, refetch } = useQuery({
     queryKey: ['vehicles'],
     queryFn: async () => {
-      const token = await getAuthToken();
-      if (!token) {
-        throw new Error('Token bulunamadı');
+      try {
+        const token = await getAuthToken();
+        console.log('🔑 Token alındı:', token ? 'Var' : 'Yok');
+        
+        if (!token) {
+          console.log('⚠️ Token yok, API çağrısı yapılamıyor');
+          // Token yoksa da API'yi çağırmayı dene
+          const result = await vehicleApi.getVehicles();
+          console.log('🚗 API Response (no token):', result);
+          return result;
+        }
+        
+        // Tüm araçları getir (filtreleme client-side yapılacak)
+        const result = await vehicleApi.getVehicles();
+        console.log('🚗 API Response:', result);
+        console.log('🚗 Vehicles data:', result?.data);
+        console.log('🚗 Vehicles count:', result?.data?.length);
+        return result;
+      } catch (error) {
+        console.error('❌ API Error:', error);
+        throw error;
       }
-      
-      // Tüm araçları getir (filtreleme client-side yapılacak)
-      return vehicleApi.getVehicles();
     },
-    enabled: !!getAuthToken(),
+    enabled: true, // Her zaman aktif et
+    retry: 3, // 3 kez dene
+    retryDelay: 1000, // 1 saniye bekle
   });
+
+  // Manuel API test
+  const testApi = async () => {
+    try {
+      console.log('🧪 Manuel API test başlıyor...');
+      const response = await fetch('http://localhost:3001/api/vehicles');
+      console.log('🧪 Fetch response status:', response.status);
+      const data = await response.json();
+      console.log('🧪 Fetch response data:', data);
+    } catch (error) {
+      console.error('🧪 Fetch error:', error);
+    }
+  };
+
+  // Sayfa yüklendiğinde API test et
+  useEffect(() => {
+    testApi();
+  }, []);
+
+  // Debug için vehicles state'ini izle
+  useEffect(() => {
+    console.log('🔍 Vehicles state changed:', {
+      vehicles,
+      isLoading,
+      vehiclesData: vehicles?.data,
+      vehiclesCount: vehicles?.data?.length
+    });
+  }, [vehicles, isLoading]);
 
   // Filtreleme state'lerini izle ve otomatik filtreleme yap
   useEffect(() => {
@@ -367,7 +424,13 @@ const VehiclesPage = () => {
              
              {/* Filtrelenmiş Araçlar */}
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               {filterVehicles(vehicles?.data || []).map(renderVehicleCard)}
+               {(() => {
+                 const filteredVehicles = filterVehicles(vehicles?.data || []);
+                 console.log('🎯 Render - Filtered vehicles:', filteredVehicles);
+                 console.log('🎯 Render - Vehicles data:', vehicles?.data);
+                 console.log('🎯 Render - Filtered count:', filteredVehicles.length);
+                 return filteredVehicles.map(renderVehicleCard);
+               })()}
              </div>
              
              {/* Filtreleme Sonucu Boşsa */}
@@ -402,21 +465,21 @@ const VehiclesPage = () => {
 
       {/* Sağ Sidebar Filtreleme Paneli */}
       <div className={`w-80 lg:block ${showFilters ? 'block' : 'hidden'}`}>
-        <div className="bg-gradient-to-br from-white via-blue-50 to-indigo-50 rounded-3xl p-6 shadow-2xl border border-blue-100 sticky top-6 backdrop-blur-sm">
+        <div className="bg-gradient-to-br from-white via-blue-50 to-indigo-50 dark:from-gray-800 dark:via-gray-700 dark:to-gray-800 rounded-3xl p-6 shadow-2xl border border-blue-100 dark:border-gray-600 sticky top-6 backdrop-blur-sm">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl">
                 <Filter className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-700 bg-clip-text text-transparent">
+                <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
                   Filtreler
                 </h3>
-                <p className="text-xs text-blue-500 font-medium">Araçlarınızı bulun</p>
+                <p className="text-xs text-blue-500 dark:text-blue-400 font-medium">Araçlarınızı bulun</p>
               </div>
             </div>
             <button 
-              className="lg:hidden p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+              className="lg:hidden p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all"
               onClick={() => setShowFilters(false)}
             >
               <X className="h-5 w-5" />
@@ -426,16 +489,16 @@ const VehiclesPage = () => {
           {/* Fiyat Aralığı */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-sm font-semibold text-gray-700 flex items-center">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 flex items-center">
                 <div className="w-2 h-2 bg-gradient-to-r from-green-400 to-blue-500 rounded-full mr-2"></div>
                 Fiyat Aralığı
               </h4>
-              <span className="text-xs text-blue-600 font-medium">₺/gün</span>
+              <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">₺/gün</span>
             </div>
             <div className="space-y-4">
               <div className="flex justify-between text-sm">
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">₺{priceRange[0]}</span>
-                <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full font-medium">₺{priceRange[1]}</span>
+                <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full font-medium">₺{priceRange[0]}</span>
+                <span className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full font-medium">₺{priceRange[1]}</span>
               </div>
               <div className="relative">
                 <input
@@ -444,7 +507,7 @@ const VehiclesPage = () => {
                   max="1000"
                   value={priceRange[1]}
                   onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
-                  className="slider w-full h-3 bg-gradient-to-r from-blue-200 to-indigo-200 rounded-full appearance-none cursor-pointer"
+                  className="slider w-full h-3 bg-gradient-to-r from-blue-200 to-indigo-200 dark:from-gray-600 dark:to-gray-500 rounded-full appearance-none cursor-pointer"
                 />
                 <div className="absolute top-0 left-0 h-3 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full" style={{width: `${(priceRange[1] / 1000) * 100}%`}}></div>
               </div>
@@ -455,7 +518,7 @@ const VehiclesPage = () => {
           <div className="mb-8">
             <div className="flex items-center mb-4">
               <div className="w-2 h-2 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full mr-2"></div>
-              <h4 className="text-sm font-semibold text-gray-700">Kategori</h4>
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Kategori</h4>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {['Sedan', 'SUV', 'Hatchback', 'Van', 'Pickup', 'Lüks'].map((category) => (
@@ -474,13 +537,13 @@ const VehiclesPage = () => {
                   />
                   <div className={`p-3 rounded-xl border-2 transition-all duration-200 group-hover:scale-105 ${
                     selectedCategories.includes(category)
-                      ? 'border-purple-500 bg-gradient-to-r from-purple-50 to-pink-50 shadow-md'
-                      : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-sm'
+                      ? 'border-purple-500 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-purple-300 dark:hover:border-purple-400 hover:shadow-sm'
                   }`}>
                     <span className={`text-sm font-medium ${
                       selectedCategories.includes(category)
-                        ? 'text-purple-700'
-                        : 'text-gray-600'
+                        ? 'text-purple-700 dark:text-purple-300'
+                        : 'text-gray-600 dark:text-gray-200'
                     }`}>
                       {category}
                     </span>
@@ -493,10 +556,10 @@ const VehiclesPage = () => {
           {/* Marka Filtreleme */}
           <div className="mb-8">
             <div className="flex items-center mb-4">
-              <div className="w-2 h-2 bg-gradient-to-r from-orange-400 to-red-500 rounded-full mr-2"></div>
-              <h4 className="text-sm font-semibold text-gray-700">Marka</h4>
+              <div className="w-2 h-2 bg-gradient-to-r from-blue-400 to-cyan-500 rounded-full mr-2"></div>
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Marka</h4>
             </div>
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
               {['BMW', 'Mercedes', 'Audi', 'Volkswagen', 'Toyota', 'Honda', 'Ford', 'Renault'].map((brand) => (
                 <label key={brand} className="relative cursor-pointer group">
                   <input
@@ -511,15 +574,15 @@ const VehiclesPage = () => {
                     }}
                     className="sr-only"
                   />
-                  <div className={`px-4 py-2 rounded-lg border transition-all duration-200 group-hover:scale-105 ${
+                  <div className={`p-3 rounded-xl border-2 transition-all duration-200 group-hover:scale-105 ${
                     selectedBrands.includes(brand)
-                      ? 'border-orange-500 bg-gradient-to-r from-orange-50 to-red-50 shadow-md'
-                      : 'border-gray-200 bg-white hover:border-orange-300 hover:shadow-sm'
+                      ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-blue-300 dark:hover:border-blue-400 hover:shadow-sm'
                   }`}>
                     <span className={`text-sm font-medium ${
                       selectedBrands.includes(brand)
-                        ? 'text-orange-700'
-                        : 'text-gray-600'
+                        ? 'text-blue-700 dark:text-blue-300'
+                        : 'text-gray-600 dark:text-gray-200'
                     }`}>
                       {brand}
                     </span>
@@ -529,11 +592,11 @@ const VehiclesPage = () => {
             </div>
           </div>
 
-          {/* Özellik Filtreleme */}
+          {/* Özellikler */}
           <div className="mb-8">
             <div className="flex items-center mb-4">
-              <div className="w-2 h-2 bg-gradient-to-r from-teal-400 to-cyan-500 rounded-full mr-2"></div>
-              <h4 className="text-sm font-semibold text-gray-700">Özellikler</h4>
+              <div className="w-2 h-2 bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full mr-2"></div>
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Özellikler</h4>
             </div>
             <div className="space-y-3">
               {[
@@ -558,16 +621,16 @@ const VehiclesPage = () => {
                   />
                   <div className={`flex items-center p-3 rounded-xl border-2 transition-all duration-200 group-hover:scale-105 ${
                     selectedFeatures.includes(feature.name)
-                      ? 'border-teal-500 bg-gradient-to-r from-teal-50 to-cyan-50 shadow-md'
-                      : 'border-gray-200 bg-white hover:border-teal-300 hover:shadow-sm'
+                      ? 'border-teal-500 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-teal-300 dark:hover:border-teal-400 hover:shadow-sm'
                   }`}>
                     <div className={`p-2 rounded-lg bg-gradient-to-r ${feature.color} mr-3`}>
                       <feature.icon className="w-4 h-4 text-white" />
                     </div>
                     <span className={`text-sm font-medium ${
                       selectedFeatures.includes(feature.name)
-                        ? 'text-teal-700'
-                        : 'text-gray-600'
+                        ? 'text-teal-700 dark:text-teal-300'
+                        : 'text-gray-600 dark:text-gray-200'
                     }`}>
                       {feature.name}
                     </span>
@@ -581,7 +644,7 @@ const VehiclesPage = () => {
           <div className="mb-8">
             <div className="flex items-center mb-4">
               <div className="w-2 h-2 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full mr-2"></div>
-              <h4 className="text-sm font-semibold text-gray-700">Yolcu Sayısı</h4>
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Yolcu Sayısı</h4>
             </div>
             <div className="grid grid-cols-3 gap-3">
               {[2, 4, 5, 6, 7, 8].map((count) => (
@@ -591,7 +654,7 @@ const VehiclesPage = () => {
                   className={`relative p-3 rounded-xl border-2 transition-all duration-200 hover:scale-105 ${
                     passengerCount === count
                       ? 'border-emerald-500 bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-emerald-300 hover:shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-300 dark:hover:border-emerald-400 hover:shadow-md'
                   }`}
                 >
                   <span className="text-sm font-bold">{count}</span>
@@ -609,7 +672,7 @@ const VehiclesPage = () => {
           <div className="mb-8">
             <div className="flex items-center mb-4">
               <div className="w-2 h-2 bg-gradient-to-r from-violet-400 to-purple-500 rounded-full mr-2"></div>
-              <h4 className="text-sm font-semibold text-gray-700">Vites Tipi</h4>
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Vites Tipi</h4>
             </div>
             <div className="space-y-3">
               {['Manuel', 'Otomatik', 'Yarı Otomatik'].map((type) => (
@@ -624,14 +687,14 @@ const VehiclesPage = () => {
                   />
                   <div className={`p-3 rounded-xl border-2 transition-all duration-200 group-hover:scale-105 ${
                     transmissionType === type
-                      ? 'border-violet-500 bg-gradient-to-r from-violet-500 to-purple-50 shadow-md'
-                      : 'border-gray-200 bg-white hover:border-violet-300 hover:shadow-sm'
+                      ? 'border-violet-500 bg-gradient-to-r from-violet-500 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-violet-300 dark:hover:border-violet-400 hover:shadow-sm'
                   }`}>
                     <div className="flex items-center">
                       <div className={`w-4 h-4 rounded-full border-2 mr-3 ${
                         transmissionType === type
                           ? 'border-violet-500 bg-violet-500'
-                          : 'border-gray-300'
+                          : 'border-gray-300 dark:border-gray-500'
                       }`}>
                         {transmissionType === type && (
                           <div className="w-2 h-2 bg-white rounded-full m-0.5"></div>
@@ -639,8 +702,8 @@ const VehiclesPage = () => {
                       </div>
                       <span className={`text-sm font-medium ${
                         transmissionType === type
-                          ? 'text-violet-700'
-                          : 'text-gray-600'
+                          ? 'text-violet-700 dark:text-violet-300'
+                          : 'text-gray-600 dark:text-gray-200'
                       }`}>
                         {type}
                       </span>
@@ -655,7 +718,7 @@ const VehiclesPage = () => {
           <div className="mb-8">
             <div className="flex items-center mb-4">
               <div className="w-2 h-2 bg-gradient-to-r from-amber-400 to-yellow-500 rounded-full mr-2"></div>
-              <h4 className="text-sm font-semibold text-gray-700">Yakıt Tipi</h4>
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Yakıt Tipi</h4>
             </div>
             <div className="space-y-3">
               {['Benzin', 'Dizel', 'Elektrik', 'Hibrit', 'LPG'].map((type) => (
@@ -670,14 +733,14 @@ const VehiclesPage = () => {
                   />
                   <div className={`p-3 rounded-xl border-2 transition-all duration-200 group-hover:scale-105 ${
                     fuelType === type
-                      ? 'border-amber-500 bg-gradient-to-r from-amber-50 to-yellow-50 shadow-md'
-                      : 'border-violet-300 hover:shadow-sm'
+                      ? 'border-amber-500 bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 shadow-md'
+                      : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-amber-300 dark:hover:border-amber-400 hover:shadow-sm'
                   }`}>
                     <div className="flex items-center">
                       <div className={`w-4 h-4 rounded-full border-2 mr-3 ${
                         fuelType === type
                           ? 'border-amber-500 bg-amber-500'
-                          : 'border-gray-300'
+                          : 'border-gray-300 dark:border-gray-500'
                       }`}>
                         {fuelType === type && (
                           <div className="w-2 h-2 bg-white rounded-full m-0.5"></div>
@@ -685,8 +748,8 @@ const VehiclesPage = () => {
                       </div>
                       <span className={`text-sm font-medium ${
                         fuelType === type
-                          ? 'text-amber-700'
-                          : 'text-gray-600'
+                          ? 'text-amber-700 dark:text-amber-300'
+                          : 'text-gray-600 dark:text-gray-200'
                       }`}>
                         {type}
                       </span>

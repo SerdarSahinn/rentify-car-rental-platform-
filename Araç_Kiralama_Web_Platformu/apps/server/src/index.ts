@@ -20,6 +20,8 @@ import userFormRoutes from './modules/userForms/routes';
 import notificationRoutes from './modules/notifications/routes';
 import adminRoutes from './modules/admin/routes';
 import webhookRoutes from './modules/webhooks/routes';
+import reviewRoutes from './modules/reviews/routes';
+
 
 // Load environment variables
 import path from 'path';
@@ -109,7 +111,9 @@ app.get('/api', (req, res) => {
       forms: '/api/forms',
       notifications: '/api/notifications',
       admin: '/api/admin',
-      webhooks: '/api/webhooks'
+      webhooks: '/api/webhooks',
+      reviews: '/api/reviews',
+
     }
   });
 });
@@ -122,6 +126,8 @@ app.use('/api/forms', userFormRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/reviews', reviewRoutes);
+
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {

@@ -50,24 +50,7 @@ export interface User {
   };
 }
 
-// Review types
-export interface Review {
-  id: string;
-  userId: string;
-  vehicleId: string;
-  rating: number;
-  comment: string;
-  isApproved: boolean;
-  createdAt: string;
-  updatedAt: string;
-  userName?: string; // Display name for reviews
-  user?: {
-    id: string;
-    firstName?: string;
-    lastName?: string;
-    avatar?: string;
-  };
-}
+
 
 // Booking types
 export interface Booking {

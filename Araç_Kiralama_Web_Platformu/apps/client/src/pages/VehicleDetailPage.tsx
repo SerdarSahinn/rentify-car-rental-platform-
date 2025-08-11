@@ -4,6 +4,7 @@ import { Car, Star, MapPin, Users, Calendar, Heart, Share2, ChevronLeft, Chevron
 import { vehicleApi } from '../services/api';
 import { formatPrice, getVehicleImages, getCategoryDisplay } from '../utils/format';
 import { useState } from 'react';
+import ReviewComponent from '../components/ReviewComponent';
 
 // Takvim Komponenti
 const VehicleCalendar = ({ vehicleId }: { vehicleId: string }) => {
@@ -271,6 +272,9 @@ const VehicleDetailPage = () => {
 
           {/* Müsaitlik Takvimi */}
           <VehicleCalendar vehicleId={id!} />
+
+          {/* Yorumlar */}
+          <ReviewComponent vehicleId={id!} />
         </div>
 
         {/* Booking Card */}

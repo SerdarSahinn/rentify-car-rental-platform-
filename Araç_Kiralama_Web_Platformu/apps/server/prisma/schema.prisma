@@ -27,6 +27,7 @@ model User {
   // İlişkiler
   bookings      Booking[]
   reviews       Review[]
+  replies       Reply[]
   favorites     Favorite[]
   notifications Notification[]
   userForms     UserForm[]
@@ -108,9 +109,30 @@ model Review {
   // İlişkiler
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  replies     Reply[]  // Yanıtlar
 
   @@unique([userId, vehicleId])
   @@map("reviews")
+}
+
+// Yanıt modeli (Reply)
+model Reply {
+  id          String   @id @default(cuid())
+  userId      String   // Yanıt yazan kullanıcı
+  reviewId    String   // Hangi yoruma yanıt
+  parentReplyId String? // Hangi yanıta yanıt (nested replies için)
+  content     String   // Yanıt metni
+  isApproved  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review      Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  parentReply Reply?   @relation("NestedReplies", fields: [parentReplyId], references: [id], onDelete: Cascade)
+  replies     Reply[]  @relation("NestedReplies") // Nested replies
+
+  @@map("replies")
 }
 
 // Favori modeli

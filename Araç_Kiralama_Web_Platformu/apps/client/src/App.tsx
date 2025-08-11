@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ClerkProvider } from '@clerk/clerk-react';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Layout from './components/Layout';
 import AdminLayout from './components/AdminLayout';
 import HomePage from './pages/HomePage';
@@ -38,40 +39,42 @@ function App() {
   return (
     <ClerkProvider publishableKey={clerkKey || ''}>
       <QueryClientProvider client={queryClient}>
-        <Router>
-          <Routes>
-            {/* Admin Login - Layout olmadan */}
-            <Route path="/admin/login" element={<AdminLogin />} />
-            
-            {/* Admin Routes - AdminLayout ile */}
-            <Route path="/admin/*" element={
-              <AdminLayout>
-                <Routes>
-                  <Route path="/" element={<AdminDashboard />} />
-                  <Route path="/bookings" element={<AdminBookings />} />
-                  <Route path="/users" element={<AdminUsers />} />
-                  <Route path="/settings" element={<AdminSettings />} />
-                </Routes>
-              </AdminLayout>
-            } />
-            
-            {/* Normal User Routes - Layout ile */}
-            <Route path="/*" element={
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/vehicles" element={<VehiclesPage />} />
-                  <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
-                  <Route path="/vehicles/:id/book" element={<BookingPage />} />
-                  <Route path="/payments/:bookingId" element={<PaymentPage />} />
-                  <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/forms/:bookingId" element={<UserFormPage />} />
-                  <Route path="/success" element={<SuccessPage />} />
-                </Routes>
-              </Layout>
-            } />
-          </Routes>
-        </Router>
+        <ThemeProvider>
+          <Router>
+            <Routes>
+              {/* Admin Login - Layout olmadan */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              
+              {/* Admin Routes - AdminLayout ile */}
+              <Route path="/admin/*" element={
+                <AdminLayout>
+                  <Routes>
+                    <Route path="/" element={<AdminDashboard />} />
+                    <Route path="/bookings" element={<AdminBookings />} />
+                    <Route path="/users" element={<AdminUsers />} />
+                    <Route path="/settings" element={<AdminSettings />} />
+                  </Routes>
+                </AdminLayout>
+              } />
+              
+              {/* Normal User Routes - Layout ile */}
+              <Route path="/*" element={
+                <Layout>
+                  <Routes>
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/vehicles" element={<VehiclesPage />} />
+                    <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
+                    <Route path="/vehicles/:id/book" element={<BookingPage />} />
+                    <Route path="/payments/:bookingId" element={<PaymentPage />} />
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/forms/:bookingId" element={<UserFormPage />} />
+                    <Route path="/success" element={<SuccessPage />} />
+                  </Routes>
+                </Layout>
+              } />
+            </Routes>
+          </Router>
+        </ThemeProvider>
       </QueryClientProvider>
     </ClerkProvider>
   );
