@@ -17,6 +17,12 @@ router.get('/:id', authenticateUser, bookingController.getBookingById.bind(booki
 // Araç için rezervasyonları getir
 router.get('/vehicle/:vehicleId', authenticateUser, bookingController.getVehicleBookings.bind(bookingController));
 
+// Araç takvim verisi getir - aylık müsaitlik
+router.get('/calendar/:vehicleId', authenticateUser, bookingController.getVehicleCalendar.bind(bookingController));
+
+// Belirli tarih aralığında tüm araçların müsaitlik durumu
+router.get('/availability', authenticateUser, bookingController.getVehiclesAvailability.bind(bookingController));
+
 // Yeni rezervasyon oluştur
 router.post('/', authenticateUser, bookingController.createBooking.bind(bookingController));
 

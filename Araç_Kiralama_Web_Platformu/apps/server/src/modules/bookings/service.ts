@@ -368,4 +368,151 @@ export class BookingService {
 
     return conflictingBookings.length === 0;
   }
+
+  // Aylık takvim verisi getir - araç müsaitlik durumu
+  async getVehicleCalendar(vehicleId: string, year: number, month: number) {
+    console.log('🗓️ Service: Getting calendar for vehicle', vehicleId, 'year:', year, 'month:', month);
+    
+    // Ayın başlangıç ve bitiş tarihleri
+    const startOfMonth = new Date(year, month - 1, 1);
+    const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+    
+    // Bu ay için tüm rezervasyonları getir
+    const monthBookings = await prisma.booking.findMany({
+      where: {
+        vehicleId,
+        AND: [
+          {
+            startDate: { lte: endOfMonth },
+            endDate: { gte: startOfMonth },
+          },
+        ],
+        status: {
+          in: ['CONFIRMED', 'PENDING', 'ACTIVE'],
+        },
+      },
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        status: true,
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+          }
+        }
+      },
+      orderBy: {
+        startDate: 'asc',
+      },
+    });
+
+    // Ayın her günü için müsaitlik durumu
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const calendar = [];
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const currentDate = new Date(year, month - 1, day);
+      const dateString = currentDate.toISOString().split('T')[0];
+      
+      // Bu gün için çakışan rezervasyonları bul
+      const dayBookings = monthBookings.filter(booking => {
+        const start = new Date(booking.startDate);
+        const end = new Date(booking.endDate);
+        return currentDate >= start && currentDate <= end;
+      });
+      
+      // Günün durumu
+      let status = 'AVAILABLE'; // Müsait
+      let bookingInfo = null;
+      
+      if (dayBookings.length > 0) {
+        const booking = dayBookings[0]; // İlk rezervasyonu al
+        status = booking.status === 'CONFIRMED' ? 'BOOKED' : 'PENDING';
+        bookingInfo = {
+          id: booking.id,
+          status: booking.status,
+          userName: `${booking.user.firstName} ${booking.user.lastName}`.trim() || 'Bilinmeyen Kullanıcı'
+        };
+      }
+      
+      calendar.push({
+        date: dateString,
+        day: day,
+        status: status, // AVAILABLE, BOOKED, PENDING
+        booking: bookingInfo
+      });
+    }
+    
+    console.log('🗓️ Service: Calendar generated with', calendar.length, 'days');
+    return {
+      year,
+      month,
+      daysInMonth,
+      calendar,
+      totalBookings: monthBookings.length
+    };
+  }
+
+  // Belirli tarih aralığında tüm araçların müsaitlik durumu
+  async getVehiclesAvailability(startDate: Date, endDate: Date) {
+    console.log('🚗 Service: getVehiclesAvailability çağrıldı');
+    console.log('🚗 Service: startDate:', startDate);
+    console.log('🚗 Service: endDate:', endDate);
+    
+    try {
+      // Tüm araçları getir
+      const vehicles = await prisma.vehicle.findMany({
+        where: { isAvailable: true },
+        select: {
+          id: true,
+          brand: true,
+          model: true,
+          year: true,
+          dailyPrice: true,
+          images: true,
+          category: true
+        }
+      });
+      
+      console.log('🚗 Service: Bulunan araç sayısı:', vehicles.length);
+      
+      // Her araç için müsaitlik kontrolü
+      const availabilityResults = await Promise.all(
+        vehicles.map(async (vehicle) => {
+          console.log(`🚗 Service: ${vehicle.brand} ${vehicle.model} için müsaitlik kontrol ediliyor...`);
+          
+          const isAvailable = await this.checkVehicleAvailability(vehicle.id, startDate, endDate);
+          
+          console.log(`🚗 Service: ${vehicle.brand} ${vehicle.model} müsait mi:`, isAvailable);
+          
+          return {
+            ...vehicle,
+            isAvailable,
+            startDate,
+            endDate,
+            totalDays: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)),
+            totalPrice: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) * vehicle.dailyPrice
+          };
+        })
+      );
+      
+      // Müsait araçları önce göster
+      const sortedResults = availabilityResults.sort((a, b) => {
+        if (a.isAvailable === b.isAvailable) {
+          return a.dailyPrice - b.dailyPrice; // Fiyata göre sırala
+        }
+        return a.isAvailable ? -1 : 1; // Müsait olanlar önce
+      });
+      
+      console.log('🚗 Service: Müsait araç sayısı:', sortedResults.filter(v => v.isAvailable).length);
+      console.log('🚗 Service: Toplam araç sayısı:', sortedResults.length);
+      
+      return sortedResults;
+    } catch (error) {
+      console.error('🚗 Service: getVehiclesAvailability hatası:', error);
+      throw error;
+    }
+  }
 } 

@@ -198,4 +198,88 @@ export class BookingController {
       return res.status(500).json({ error: 'Araç rezervasyonları getirilemedi' });
     }
   }
+
+  // Araç takvim verisi getir - aylık müsaitlik
+  async getVehicleCalendar(req: AuthRequest, res: Response) {
+    try {
+      const { vehicleId } = req.params;
+      const { year, month } = req.query;
+      
+      if (!year || !month) {
+        return res.status(400).json({ 
+          error: 'Yıl ve ay parametreleri gerekli',
+          example: '/api/bookings/calendar/vehicleId?year=2024&month=12'
+        });
+      }
+      
+      const calendarData = await this.bookingService.getVehicleCalendar(
+        vehicleId, 
+        parseInt(year as string), 
+        parseInt(month as string)
+      );
+      
+      return res.json({
+        success: true,
+        data: calendarData,
+        message: 'Araç takvimi başarıyla getirildi'
+      });
+    } catch (error) {
+      console.error('🗓️ getVehicleCalendar hatası:', error);
+      return res.status(500).json({ error: 'Araç takvimi getirilemedi' });
+    }
+  }
+
+  // Belirli tarih aralığında tüm araçların müsaitlik durumu
+  async getVehiclesAvailability(req: AuthRequest, res: Response) {
+    try {
+      console.log('🚗 Controller: getVehiclesAvailability çağrıldı');
+      console.log('🚗 Request user:', req.user);
+      console.log('🚗 Query params:', req.query);
+      
+      const { startDate, endDate } = req.query;
+      
+      if (!startDate || !endDate) {
+        console.log('❌ startDate veya endDate eksik');
+        return res.status(400).json({ 
+          error: 'Başlangıç ve bitiş tarihi gerekli',
+          example: '/api/bookings/availability?startDate=2024-12-01&endDate=2024-12-05'
+        });
+      }
+      
+      // Tarih formatını kontrol et
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+      
+      console.log('🚗 Parsed dates:', { start, end });
+      
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        console.log('❌ Geçersiz tarih formatı');
+        return res.status(400).json({ error: 'Geçersiz tarih formatı' });
+      }
+      
+      if (start >= end) {
+        console.log('❌ Başlangıç tarihi >= bitiş tarihi');
+        return res.status(400).json({ error: 'Başlangıç tarihi bitiş tarihinden önce olmalı' });
+      }
+      
+      console.log('🚗 Service çağrılıyor...');
+      const availabilityData = await this.bookingService.getVehiclesAvailability(start, end);
+      
+      console.log('🚗 Service response:', availabilityData);
+      
+      return res.json({
+        success: true,
+        data: availabilityData,
+        message: 'Araç müsaitlik durumu başarıyla getirildi',
+        filters: {
+          startDate: startDate,
+          endDate: endDate,
+          totalDays: Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+        }
+      });
+    } catch (error) {
+      console.error('🚗 getVehiclesAvailability hatası:', error);
+      return res.status(500).json({ error: 'Araç müsaitlik durumu getirilemedi' });
+    }
+  }
 } 

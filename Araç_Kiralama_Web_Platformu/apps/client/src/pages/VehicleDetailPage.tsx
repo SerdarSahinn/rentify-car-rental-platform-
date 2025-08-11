@@ -1,8 +1,145 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Car, Star, MapPin, Users, Calendar, Heart, Share2 } from 'lucide-react';
+import { Car, Star, MapPin, Users, Calendar, Heart, Share2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { vehicleApi } from '../services/api';
 import { formatPrice, getVehicleImages, getCategoryDisplay } from '../utils/format';
+import { useState } from 'react';
+
+// Takvim Komponenti
+const VehicleCalendar = ({ vehicleId }: { vehicleId: string }) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth() + 1;
+
+  const { data: calendarData, isLoading } = useQuery({
+    queryKey: ['vehicle-calendar', vehicleId, year, month],
+    queryFn: () => fetch(`/api/bookings/calendar/${vehicleId}?year=${year}&month=${month}`)
+      .then(res => res.json()),
+    enabled: !!vehicleId
+  });
+
+  const goToPreviousMonth = () => {
+    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const getMonthName = (month: number) => {
+    const months = [
+      'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+      'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+    ];
+    return months[month - 1];
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'AVAILABLE': return 'bg-green-100 text-green-800 border-green-200';
+      case 'BOOKED': return 'bg-red-100 text-red-800 border-red-200';
+      case 'PENDING': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'AVAILABLE': return 'Müsait';
+      case 'BOOKED': return 'Dolu';
+      case 'PENDING': return 'Beklemede';
+      default: return 'Bilinmiyor';
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="animate-pulse">
+        <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+        <div className="grid grid-cols-7 gap-2">
+          {Array.from({ length: 35 }).map((_, i) => (
+            <div key={i} className="h-12 bg-gray-200 rounded"></div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const calendar = calendarData?.data?.calendar || [];
+  const weekDays = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
+      <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+        <Calendar className="h-5 w-5 mr-2 text-blue-500" />
+        Müsaitlik Takvimi
+      </h3>
+      
+      {/* Ay Navigasyonu */}
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={goToPreviousMonth}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <ChevronLeft className="h-5 w-5 text-gray-600" />
+        </button>
+        
+        <h4 className="text-lg font-semibold text-gray-900">
+          {getMonthName(month)} {year}
+        </h4>
+        
+        <button
+          onClick={goToNextMonth}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <ChevronRight className="h-5 w-5 text-gray-600" />
+        </button>
+      </div>
+
+      {/* Hafta Başlıkları */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {weekDays.map(day => (
+          <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+            {day}
+          </div>
+        ))}
+      </div>
+
+      {/* Takvim Günleri */}
+      <div className="grid grid-cols-7 gap-1">
+        {calendar.map((day: any) => (
+          <div
+            key={day.date}
+            className={`
+              h-12 flex items-center justify-center text-sm font-medium rounded-lg border
+              ${getStatusColor(day.status)}
+              ${day.status === 'AVAILABLE' ? 'cursor-pointer hover:bg-green-200' : 'cursor-default'}
+            `}
+            title={`${day.date}: ${getStatusText(day.status)}`}
+          >
+            {day.day}
+          </div>
+        ))}
+      </div>
+
+      {/* Durum Açıklamaları */}
+      <div className="flex items-center justify-center space-x-4 mt-4 pt-4 border-t">
+        <div className="flex items-center space-x-2">
+          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+          <span className="text-sm text-gray-600">Müsait</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+          <span className="text-sm text-gray-600">Dolu</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+          <span className="text-sm text-gray-600">Beklemede</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const VehicleDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -131,6 +268,9 @@ const VehicleDetailPage = () => {
               </div>
             </div>
           )}
+
+          {/* Müsaitlik Takvimi */}
+          <VehicleCalendar vehicleId={id!} />
         </div>
 
         {/* Booking Card */}

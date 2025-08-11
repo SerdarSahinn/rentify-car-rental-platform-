@@ -96,6 +96,24 @@ app.get('/health', (req, res) => {
   });
 });
 
+// API base endpoint
+app.get('/api', (req, res) => {
+  res.status(200).json({
+    message: 'Rentify API çalışıyor',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      auth: '/api/auth',
+      vehicles: '/api/vehicles',
+      bookings: '/api/bookings',
+      forms: '/api/forms',
+      notifications: '/api/notifications',
+      admin: '/api/admin',
+      webhooks: '/api/webhooks'
+    }
+  });
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/vehicles', vehicleRoutes);
